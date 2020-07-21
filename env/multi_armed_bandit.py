@@ -10,9 +10,18 @@ class MultiArmedBanditEnv(object):
         self.sigma = sigma
         self.k_dist = np.random.normal(loc=self.mu, scale=self.sigma, size=(self.k, self.size))
 
-    def reward(self, action):
-        action_idx = self.actions_space.index(action)
-        return np.random.choice(self.k_dist[action_idx], 1)[0]
+    def get_reward(self, action_idx):
+        """
+        action is a np.array(n_actions) like structure
+        """
+        # action_idx = self.actions_space.index(action)
+        return np.random.choice(self.k_dist[action_idx])
+    
+    def get_k(self):
+        return self.k
+    
+    def get_actions_space(self):
+        return self.actions_space
 
 
 if __name__ == "__main__":
@@ -22,6 +31,7 @@ if __name__ == "__main__":
     print(env.k_dist)
 
     action = 'arm1'
-    print(env.reward(action))
-    print(env.reward(action) in env.k_dist[actions_space.index(action)])
+    action_idx = actions_space.index(action)
+    print(env.get_reward(action_idx))
+    print(env.get_reward(action_idx) in env.k_dist[action_idx])
     
