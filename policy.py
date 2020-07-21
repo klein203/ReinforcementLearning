@@ -1,4 +1,4 @@
-import random
+import numpy as np
 
 
 class Policy(object):
@@ -7,16 +7,16 @@ class Policy(object):
     
     def choose(self, state, actions_prob):
         """
-        π(a|s), { a: p(a|s) }
+        π(a|s), matrix (n_actions, 1)
         """
         raise NotImplementedError()
 
 
 class RandomPolicy(Policy):
     def choose(self, state, actions_prob):
-        action_list = list(actions_prob.keys())
-        action_choose = random.choice(action_list)
-        return action_choose, actions_prob.get(action_choose)
+        n_actions = len(actions_prob)
+        action_idx = np.random.choice(n_actions)
+        return action_idx, actions_prob[action_idx]
 
 
 class EpsilonGreedyPolicy(Policy):
@@ -26,15 +26,15 @@ class EpsilonGreedyPolicy(Policy):
         self.epsilon = epsilon
     
     def choose(self, state, actions_prob):
-        action_list = []
-        if random.random() <= self.epsilon:
-            max_action_prob = max(actions_prob.values())
-            action_list = [key for key, val in actions_prob.items() if val == max_action_prob]
+        if np.random.random() <= self.epsilon:
+            max_action_prob = np.max(actions_prob)
+            action_idx_list = np.where(actions_prob==max_action_prob)[0]
+            action_idx = np.random.choice(action_idx_list)
         else:
-            action_list = list(actions_prob.keys())
+            n_actions = len(actions_prob)
+            action_idx = np.random.choice(n_actions)
         
-        action_choose = random.choice(action_list)
-        return action_choose, actions_prob.get(action_choose)
+        return action_idx, actions_prob[action_idx]
 
 
 class GreedyPolicy(EpsilonGreedyPolicy):
@@ -43,16 +43,14 @@ class GreedyPolicy(EpsilonGreedyPolicy):
         self.name = 'GreedyPolicy'
 
 
-if __name__ == "__main__":
-    policy = EpsilonGreedyPolicy()
-    actions_space = ['a1', 'a2', 'a3', 'a4']
-    # actions = { action: .25 for action in actions_space }
-    actions = { 
-        'a1': .25,
-        'a2': .3,
-        'a3': .3,
-        'a4': .15,
-    }
-    for i in range(100):
-        action, probs = policy.choose(None, actions)
-        print(action, probs)
+# if __name__ == "__main__":
+#     policy = EpsilonGreedyPolicy()
+
+#     # actions_prob = np.random.random(4)
+#     actions_prob = np.array(
+#         [0.2, 0.35, 0.1, 0.35]
+#     )
+
+#     for i in range(100):
+#         action, probs = policy.choose(None, actions_prob)
+#         print(action, probs)
