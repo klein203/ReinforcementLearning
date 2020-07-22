@@ -7,12 +7,16 @@ class Policy(object):
     
     def choose(self, actions_prob):
         """
-        π(a|s), matrix (n_actions, 1)
+        π(a|s)
         """
         raise NotImplementedError()
 
 
 class RandomPolicy(Policy):
+    def __init__(self, *args, **kwargs):
+        super(RandomPolicy, self).__init__(*args, **kwargs)
+        self.name = 'RandomPolicy'
+    
     def choose(self, actions_prob):
         n_actions = len(actions_prob)
         action_idx = np.random.choice(n_actions)
@@ -22,8 +26,8 @@ class RandomPolicy(Policy):
 class EpsilonGreedyPolicy(Policy):
     def __init__(self, epsilon=0.1, *args, **kwargs):
         super(EpsilonGreedyPolicy, self).__init__(*args, **kwargs)
-        self.name = 'EpsilonGreedyPolicy'
         self.epsilon = epsilon
+        self.name = 'EpsilonGreedyPolicy(e=%.4f)' % self.epsilon
     
     def choose(self, actions_prob):
         if np.random.rand() >= self.epsilon:
