@@ -4,17 +4,18 @@ import numpy as np
 
 class MultiArmedBanditEnv(object):
     def __init__(self, actions_space):
+        self.name = 'MultiArmedBanditEnv'
         self.actions_space = actions_space
         self.k = len(actions_space)
         
         # r_mean_target ~ N(0, 1)
-        self.actions_reward_mean_target = np.random.standard_normal(self.k)
-        self.actions_reward_var_target = np.ones(self.k)
+        self.reward_target_mean = np.random.standard_normal(self.k)
+        self.reward_target_var = np.ones(self.k)
 
     def get_reward(self, action_idx):
         # q_target ~ N(r_mean_target, 1.0)
-        loc = self.actions_reward_mean_target[action_idx]
-        scale = self.actions_reward_var_target[action_idx]
+        loc = self.reward_target_mean[action_idx]
+        scale = self.reward_target_var[action_idx]
         return np.random.normal(loc=loc, scale=scale)
     
     def get_k(self):
@@ -23,17 +24,18 @@ class MultiArmedBanditEnv(object):
     def get_actions_space(self):
         return self.actions_space
 
-    def get_actions_reward_mean_target(self):
-        return self.actions_reward_mean_target
+    def get_reward_target_mean(self):
+        return self.reward_target_mean
         
-    def get_actions_reward_var_target(self):
-        return self.actions_reward_var_target
+    def get_reward_target_var(self):
+        return self.reward_target_var
     
     def info(self):
-        logging.info('Q Mean Target Value')
-        logging.info(self.get_actions_reward_mean_target())
-        logging.info('Q Var Target Value')
-        logging.info(self.get_actions_reward_var_target())
+        logging.info('------------------------------------------------------------')
+        logging.info('%s Action Target Distribution' % self.name)
+        logging.info('------------------------------------------------------------')
+        for target in zip(self.actions_space, self.reward_target_mean, self.reward_target_var):
+            logging.info("%s R ~ N (%.4f, %.2f)" % (target[0], target[1], target[2]))
 
 
 if __name__ == "__main__":

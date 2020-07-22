@@ -27,43 +27,46 @@ class BanditAlgorithm(object):
     def _update(self, action_idx, action_idx_reward):
         raise NotImplementedError()
 
-    def run(self, policy, i_episode, n_steps):
-        sum_q = np.zeros(n_steps)
+    def _run(self, policy, i_episode):
+        q_step = np.zeros(self.n_steps)
 
-        for i_step in range(n_steps):
+        for i_step in range(self.n_steps):
             action_idx, _ = policy.choose(self.q)
             action_idx_reward = self.env.get_reward(action_idx)
 
             self._update(action_idx, action_idx_reward)
-
-            sum_q[i_step] = np.sum(self.q)
+            
+            # history gathering
+            q_step[i_step] = action_idx_reward
         
-        # final q values after an episode
-        self.store_params('q(a)', i_episode, self.q)
-        self.store_params('n(a)', i_episode, self.n_times)
-        self.store_params('G(step)', i_episode, sum_q)
+        # Q_step: n_episode x n_step
+        self.store_params('Q_steps', i_episode, q_step)
+        # N_arm: n_episode x n_arms
+        self.store_params('N_actions', i_episode, self.n_times)
     
     def run_episodes(self, policy, n_episodes=2000, n_steps=1000):
         self.history.clear()
+        self.policy = policy
+        self.n_episodes = n_episodes
+        self.n_steps = n_steps
+
         for i_episode in range(n_episodes):
             self.reset()
-            self.run(policy, i_episode, n_steps)
+            self._run(policy, i_episode)
             
     def report(self):
-        q_per_action = self.history.get('q(a)')
-        logging.info('Q(a) Mean Value')
-        logging.info(np.mean(q_per_action, axis=0))
-        logging.info('Q(a) Var Value')
-        logging.info(np.var(q_per_action, axis=0))
+        logging.info('------------------------------------------------------------')
+        logging.info("%s_%s_EP%d_ST%d" % (self.name, self.policy.name, self.n_episodes, self.n_steps))
+        logging.info('------------------------------------------------------------')
 
-        n_per_action = self.history.get('n(a)')
-        logging.info('N(a) Mean Value')
-        logging.info(np.mean(n_per_action, axis=0))
+        q_steps = self.history.get('Q_steps')
+        q_steps_mean = np.mean(q_steps, axis=0)
+        logging.debug('Q Mean Value: %s' % q_steps_mean)
+        logging.info('Final Q Mean Value: %.4f' % q_steps_mean[-1])
 
-        g_per_step = self.history.get('G(step)')
-        logging.debug('G(step) Mean Value')
-        logging.debug(np.mean(g_per_step, axis=0))
-        logging.info('Final G Mean Value: %f' % np.mean(g_per_step, axis=0)[-1])
+        n_actions = self.history.get('N_actions')
+        n_actions_mean = np.mean(n_actions, axis=0)
+        logging.info('N Mean Value: %s' % n_actions_mean)
 
 
 class ActionValueMethods(BanditAlgorithm):
@@ -94,96 +97,90 @@ class IncrementalImpl(BanditAlgorithm):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    np.random.seed(seed=7)
 
-    # 10 Armed
+    # plot config
+    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+    # 10 armed bandit
     n_arm = 10
     actions_space = ['Arm%d' % i for i in range(n_arm)]
     env = MultiArmedBanditEnv(actions_space)
-    logging.info('------------------------------------------------------------')
-    logging.info('MultiArmedBanditEnv_Action_Target')
-    logging.info('------------------------------------------------------------')
     env.info()
+
+    reward_target_action = []
+    reward_target_mean = env.get_reward_target_mean()
+    reward_target_var = env.get_reward_target_var()
+    sample_size = 100
+
+    for item in zip(actions_space, reward_target_mean, reward_target_var):
+        series = pd.Series(np.random.normal(loc=item[1], scale=item[2], size=sample_size), name=item[0])
+        reward_target_action.append(series)
+
+    sns.swarmplot(data=reward_target_action, size=1, ax=axes[0])
 
     # agent_clazzes = [ActionValueMethods, IncrementalImpl]
     # policy_clazzes = [RandomPolicy, GreedyPolicy, EpsilonGreedyPolicy]
 
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-
-    agent = ActionValueMethods(env)
-    n_episodes=100
+    agent = IncrementalImpl(env)
+    n_episodes=2000
     n_steps=1000
 
-    g_per_policy = []
 
-    policy = RandomPolicy()
-    logging.info('------------------------------------------------------------')
-    logging.info("%s_%s_EP%d_ST%d" % (agent.name, policy.name, n_episodes, n_steps))
-    logging.info('------------------------------------------------------------')
-    agent.run_episodes(policy, n_episodes, n_steps)
+    q_steps_policy = []
+
+    agent.run_episodes(RandomPolicy(), n_episodes, n_steps)
     agent.report()
-
-    q_df = pd.DataFrame(agent.history.get('q(a)'), columns=env.get_actions_space())
-    sns.swarmplot(data=q_df, size=1, ax=axes[0])
-
-    g_per_policy.append(pd.Series(np.mean(agent.history.get('G(step)'), axis=0), name='random'))
+    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='random'))
 
 
-    policy = GreedyPolicy()
-    logging.info('------------------------------------------------------------')
-    logging.info("%s_%s_EP%d_ST%d" % (agent.name, policy.name, n_episodes, n_steps))
-    logging.info('------------------------------------------------------------')
-    agent.run_episodes(policy, n_episodes, n_steps)
+    agent.run_episodes(GreedyPolicy(), n_episodes, n_steps)
     agent.report()
-
-    g_per_policy.append(pd.Series(np.mean(agent.history.get('G(step)'), axis=0), name='greedy'))
-
-
-    # policy = EpsilonGreedyPolicy(epsilon=0.01)
-    # logging.info('------------------------------------------------------------')
-    # logging.info("%s_%s_EP%d_ST%d" % (agent.name, policy.name, n_episodes, n_steps))
-    # logging.info('------------------------------------------------------------')
-    # agent.run_episodes(policy, n_episodes, n_steps)
-    # agent.report()
-
-    # g_per_policy.append(pd.Series(np.mean(agent.history.get('G(step)'), axis=0), name='e-greedy %.2f' % policy.epsilon))
+    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='greedy'))
 
 
-    policy = EpsilonGreedyPolicy()
-    logging.info('------------------------------------------------------------')
-    logging.info("%s_%s_EP%d_ST%d" % (agent.name, policy.name, n_episodes, n_steps))
-    logging.info('------------------------------------------------------------')
-    agent.run_episodes(policy, n_episodes, n_steps)
+    agent.run_episodes(EpsilonGreedyPolicy(epsilon=0.01), n_episodes, n_steps)
     agent.report()
+    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.01'))
 
-    g_per_policy.append(pd.Series(np.mean(agent.history.get('G(step)'), axis=0), name='e-greedy %.2f' % policy.epsilon))
+
+    agent.run_episodes(EpsilonGreedyPolicy(epsilon=0.5), n_episodes, n_steps)
+    agent.report()
+    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.5'))
 
 
-    # policy = EpsilonGreedyPolicy(epsilon=0.5)
-    # logging.info('------------------------------------------------------------')
-    # logging.info("%s_%s_EP%d_ST%d" % (agent.name, policy.name, n_episodes, n_steps))
-    # logging.info('------------------------------------------------------------')
-    # agent.run_episodes(policy, n_episodes, n_steps)
-    # agent.report()
-
-    # g_per_policy.append(pd.Series(np.mean(agent.history.get('G(step)'), axis=0), name='e-greedy %.2f' % policy.epsilon))
+    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.1'))
     
-    sns.lineplot(data=g_per_policy, size=0.5, ax=axes[1])
+    sns.lineplot(data=q_steps_policy, size=0.5, ax=axes[1])
+
+    n_actions_mean = np.mean(agent.history.get('N_actions'), axis=0)
+    df = pd.DataFrame(data=n_actions_mean.reshape(1, -1), columns=env.actions_space)
+    sns.barplot(data=df, ax=axes[2])
 
 
     # 1st diagram format
-    axes[0].set_title('Q*(a) Distribution of Arms', fontsize=10)
-    axes[0].set_xlabel('Actions', fontsize=8)
+    axes[0].set_title('Reward Distribution of Arms', fontsize=10)
+    axes[0].set_xlabel('Arms', fontsize=8)
     axes[0].set_ylabel('Q*(a)', fontsize=8)
     axes[0].tick_params(labelsize=6)
     axes[0].grid(True, linestyle=':')
     
     # 2nd diagram format
-    axes[1].set_title('G(a) Trends', fontsize=10)
+    axes[1].set_title('Q Trends', fontsize=10)
     axes[1].set_xlabel('Steps', fontsize=8)
-    axes[1].set_ylabel('G(a)', fontsize=8)
+    axes[1].set_ylabel('Q(a)', fontsize=8)
     axes[1].tick_params(labelsize=6)
     axes[1].grid(True, axis='y', linestyle=':')
-    axes[1].legend(loc='center right', fontsize=8)
+    axes[1].legend(loc='lower right', fontsize=8)
+
+    # 3rd diagram format
+    axes[2].set_title('N Distribution of Arms on e-greedy(0.1) Policy', fontsize=10)
+    axes[2].set_xlabel('Arms', fontsize=8)
+    axes[2].set_ylabel('N(a)', fontsize=8)
+    axes[2].tick_params(labelsize=6)
+    axes[2].grid(True, axis='y', linestyle=':')
 
     plt.tight_layout()
     plt.show()
