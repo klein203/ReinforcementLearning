@@ -97,90 +97,94 @@ class IncrementalImpl(BanditAlgorithm):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
     np.random.seed(seed=7)
 
-    # plot config
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+    # plots init and config
+    fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
 
-    # 10 armed bandit
+    # 1st diagram format
+    ax1.set_title('Reward Distribution of Arms', fontsize=10)
+    ax1.set_xlabel('Arms', fontsize=8)
+    ax1.set_ylabel('R', fontsize=8)
+    ax1.tick_params(labelsize=6)
+    ax1.grid(True, linestyle=':')
+    
+    # 2nd diagram format
+    ax2.set_title('N Distribution of Arms on e-greedy(0.1) Policy', fontsize=10)
+    ax2.set_xlabel('Arms', fontsize=8)
+    ax2.set_ylabel('N(a)', fontsize=8)
+    ax2.tick_params(labelsize=6)
+    ax2.grid(True, axis='y', linestyle=':')
+
+    # 3rd diagram format
+    ax3.set_title('Q Trends', fontsize=10)
+    ax3.set_xlabel('Steps', fontsize=8)
+    ax3.set_ylabel('Q(a)', fontsize=8)
+    ax3.tick_params(labelsize=6)
+    ax3.grid(True, axis='y', linestyle=':')
+    ax3.legend(loc='lower right', fontsize=7)
+
+
+    # 10-armed bandit enviroment
     n_arm = 10
     actions_space = ['Arm%d' % i for i in range(n_arm)]
     env = MultiArmedBanditEnv(actions_space)
     env.info()
 
-    reward_target_action = []
-    reward_target_mean = env.get_reward_target_mean()
-    reward_target_var = env.get_reward_target_var()
-    sample_size = 100
+    # plot reward target distribution of given environment
+    reward_target_list = []
+    sampling_size = 100
 
-    for item in zip(actions_space, reward_target_mean, reward_target_var):
-        series = pd.Series(np.random.normal(loc=item[1], scale=item[2], size=sample_size), name=item[0])
-        reward_target_action.append(series)
+    for item in zip(actions_space, env.get_reward_target_mean(), env.get_reward_target_var()):
+        action_series = pd.Series(np.random.normal(loc=item[1], scale=item[2], size=sampling_size), name=item[0])
+        reward_target_list.append(action_series)
 
-    sns.swarmplot(data=reward_target_action, size=1, ax=axes[0])
+    sns.swarmplot(data=reward_target_list, size=1, ax=ax1)
 
-    # agent_clazzes = [ActionValueMethods, IncrementalImpl]
-    # policy_clazzes = [RandomPolicy, GreedyPolicy, EpsilonGreedyPolicy]
-
+    # evaluation using incremental implementation algorithm with various policies
     agent = IncrementalImpl(env)
-    n_episodes=2000
+    n_episodes=100
     n_steps=1000
 
+    # params storing
+    q_steps_list = []
 
-    q_steps_policy = []
-
+    # random
     agent.run_episodes(RandomPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='random'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='random'))
 
-
+    # greedy, e=0.0
     agent.run_episodes(GreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='greedy'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='greedy'))
 
-
+    # e-greedy, e=0.01
     agent.run_episodes(EpsilonGreedyPolicy(epsilon=0.01), n_episodes, n_steps)
     agent.report()
-    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.01'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.01'))
 
-
+    # e-greedy, e=0.5
     agent.run_episodes(EpsilonGreedyPolicy(epsilon=0.5), n_episodes, n_steps)
     agent.report()
-    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.5'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.5'))
 
-
+    # e-greedy, e=0.1
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_policy.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.1'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.1'))
     
-    sns.lineplot(data=q_steps_policy, size=0.5, ax=axes[1])
+    # plot Q trends over steps with various policies
+    sns.lineplot(data=q_steps_list, size=0.5, ax=ax3)
 
+    # plot N distribution using e-greedy(0.1) policy
+    # by using e-greedy policy, action reward with higher target mean value in the first place 
+    # has much higher possiblity to be choosed
     n_actions_mean = np.mean(agent.history.get('N_actions'), axis=0)
     df = pd.DataFrame(data=n_actions_mean.reshape(1, -1), columns=env.actions_space)
-    sns.barplot(data=df, ax=axes[2])
+    sns.barplot(data=df, ax=ax2)
 
-
-    # 1st diagram format
-    axes[0].set_title('Reward Distribution of Arms', fontsize=10)
-    axes[0].set_xlabel('Arms', fontsize=8)
-    axes[0].set_ylabel('Q*(a)', fontsize=8)
-    axes[0].tick_params(labelsize=6)
-    axes[0].grid(True, linestyle=':')
-    
-    # 2nd diagram format
-    axes[1].set_title('Q Trends', fontsize=10)
-    axes[1].set_xlabel('Steps', fontsize=8)
-    axes[1].set_ylabel('Q(a)', fontsize=8)
-    axes[1].tick_params(labelsize=6)
-    axes[1].grid(True, axis='y', linestyle=':')
-    axes[1].legend(loc='lower right', fontsize=8)
-
-    # 3rd diagram format
-    axes[2].set_title('N Distribution of Arms on e-greedy(0.1) Policy', fontsize=10)
-    axes[2].set_xlabel('Arms', fontsize=8)
-    axes[2].set_ylabel('N(a)', fontsize=8)
-    axes[2].tick_params(labelsize=6)
-    axes[2].grid(True, axis='y', linestyle=':')
-
+    # plot show
     plt.tight_layout()
     plt.show()
