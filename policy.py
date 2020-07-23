@@ -1,7 +1,7 @@
 import numpy as np
 
 
-class Policy(object):
+class AbstractPolicy(object):
     def __init__(self, *args, **kwargs):
         self.name = 'AbstractPolicy'
     
@@ -12,7 +12,7 @@ class Policy(object):
         raise NotImplementedError()
 
 
-class RandomPolicy(Policy):
+class RandomPolicy(AbstractPolicy):
     def __init__(self, *args, **kwargs):
         super(RandomPolicy, self).__init__(*args, **kwargs)
         self.name = 'RandomPolicy'
@@ -23,7 +23,7 @@ class RandomPolicy(Policy):
         return action_idx, actions_prob[action_idx]
 
 
-class EpsilonGreedyPolicy(Policy):
+class EpsilonGreedyPolicy(AbstractPolicy):
     def __init__(self, epsilon=0.1, *args, **kwargs):
         super(EpsilonGreedyPolicy, self).__init__(*args, **kwargs)
         self.epsilon = epsilon
