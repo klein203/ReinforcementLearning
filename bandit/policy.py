@@ -57,7 +57,7 @@ class UpperConfidenceBoundPolicy(AbstractPolicy):
         if len(action_idx_list) > 0:
             action_idx = np.random.choice(action_idx_list)
         else:
-            # choose argmax
+            # choose argmax(Q_t(a) + c * sqrt(ln(t)/N_t(a)))
             action_idx = np.argmax(q_actions + self.c * np.sqrt(np.log(t) / n_actions))
         
         return action_idx, q_actions[action_idx]
