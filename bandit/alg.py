@@ -1,7 +1,6 @@
 import logging
 import numpy as np
-from bandit.env import MultiArmedBanditEnv, NonstationaryMultiArmedBanditEnv
-from bandit.policy import EpsilonGreedyPolicy, GreedyPolicy, RandomPolicy
+import pandas as pd
 from utils.history import History
 
 
@@ -28,7 +27,7 @@ class BanditAlgorithm(object):
         q_step = np.zeros(self.n_steps)
 
         for i_step in range(self.n_steps):
-            action_idx, _ = policy.choose(self.q)
+            action_idx, _ = policy.choose(self.q, self.n_times, i_step+1)
             action_idx_reward = self.env.get_reward(action_idx)
 
             self._update(action_idx, action_idx_reward)
@@ -96,19 +95,61 @@ class IncrementalValueUpdAlg(BanditAlgorithm):
     def _update(self, action_idx, action_idx_reward):
         self.n_times[action_idx] = self.n_times[action_idx] + 1
         self.q[action_idx] = self.q[action_idx] + 1 / self.n_times[action_idx] * (action_idx_reward - self.q[action_idx])
+    
+    def sampling_alpha(self, size=1000):
+        self.reset()
+        return pd.Series([1/i for i in range(1, size+1)], name='incremental val upd')
 
 
 class ExpRecencyWeightedAvgAlg(BanditAlgorithm):
     """
     Exponetial recency-weighted average algorithm
     """
-    def __init__(self, env, step_size, *args, **kwargs):
+    def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(ExpRecencyWeightedAvgAlg, self).__init__(env, *args, **kwargs)
         self.name = 'ExponentialRecencyWeightedAverage'
         # alpha
-        self.step_size = step_size
+        self.alpha = step_size
 
     def _update(self, action_idx, action_idx_reward):
         # exponential recency-weighted average: the bigger the i is, the bigger the weight of R_i is
         self.n_times[action_idx] = self.n_times[action_idx] + 1
-        self.q[action_idx] = self.q[action_idx] + self.step_size * (action_idx_reward - self.q[action_idx])
+        self.q[action_idx] = self.q[action_idx] + self.alpha * (action_idx_reward - self.q[action_idx])
+    
+    def sampling_alpha(self, size=1000):
+        self.reset()
+        return pd.Series([self.alpha] * size, name='exp recency-weighted avg')
+
+
+class BetaMoveStepAlg(BanditAlgorithm):
+    """
+    BetaMoveStep algorithm?
+    β = α / ο_n
+    ο_n = ο_n-1 + α * (1 - ο_n-1),  ο_0 = 0
+    """
+    def __init__(self, env, step_size=0.1, *args, **kwargs):
+        super(BetaMoveStepAlg, self).__init__(env, *args, **kwargs)
+        self.name = 'BetaMoveStepAlg'
+        # alpha
+        self.alpha = step_size
+        self.omicron = np.zeros(self.k)
+        self.beta = np.zeros(self.k)
+
+    def _update(self, action_idx, action_idx_reward):
+        self.n_times[action_idx] = self.n_times[action_idx] + 1
+        self.omicron[action_idx] = (1 - self.alpha) * self.omicron[action_idx] + self.alpha
+        self.beta[action_idx] = self.alpha / self.omicron[action_idx]
+        self.q[action_idx] = self.q[action_idx] + self.beta[action_idx] * (action_idx_reward - self.q[action_idx])
+    
+    def sampling_alpha(self, size=1000):
+        self.reset()
+        alpha = self.alpha
+        omicron = 0
+        beta = 0
+        samples = []
+        for i in range(size):
+            omicron = (1 - alpha) * omicron + alpha
+            beta = alpha / omicron
+            samples.append(beta)
+
+        return pd.Series(samples, name='beta step move')

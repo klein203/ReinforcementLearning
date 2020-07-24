@@ -4,13 +4,16 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from bandit.env import MultiArmedBanditEnv, NonstationaryMultiArmedBanditEnv
-from bandit.policy import EpsilonGreedyPolicy, GreedyPolicy, RandomPolicy
-from bandit.alg import IncrementalValueUpdAlg, ExpRecencyWeightedAvgAlg
+from bandit.policy import EpsilonGreedyPolicy, GreedyPolicy, RandomPolicy, UpperConfidenceBoundPolicy
+from bandit.alg import IncrementalValueUpdAlg, ExpRecencyWeightedAvgAlg, BetaMoveStepAlg
 
 
-def fig_1(n_episodes=100, n_steps=1000):
+def ch2_3(n_episodes=100, n_steps=1000):
     """
-    ref figure on page 29
+    chapter 2.3 (page 29)
+    1) Reward distribution of arms
+    2) N distribution of arms using incremental value update algorithm on e-greedy(0.1)
+    3) Q trends over steps with various policies (random, e-greedy(0.5; 0.1; 0.01), greedy(0))
     """
     # plots init and config
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
@@ -93,9 +96,12 @@ def fig_1(n_episodes=100, n_steps=1000):
     plt.tight_layout()
     plt.show()
 
-def fig_2(n_episodes=100, n_steps=10000):
+def ch2_5(n_episodes=100, n_steps=10000):
     """
-    ref practice 2.5 on page 33
+    chapter 2.5 (page 33)
+    1) Reward distribution of arms in non-stationary environment
+    2) N distribution of arms using exponential recency-weighted average algorithm on e-greedy(0.1)
+    3) Q trends over steps with various algorithms (incremental val upd + e-greedy(0.1); exp recency-weighted avg + e-greedy(0.1))
     """
     # plots init and config
     fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(15, 5))
@@ -147,6 +153,12 @@ def fig_2(n_episodes=100, n_steps=10000):
     agent.report()
     q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='step move(a=0.1), e-greedy(e=0.1)'))
 
+    # beta move step algorithm with e-greedy(0.1) policy
+    # agent = BetaMoveStepAlg(env, step_size=0.1)
+    # agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    # agent.report()
+    # q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='beta step move(a=0.1), e-greedy(e=0.1)'))
+
     # plot Q trends over steps with various policies
     sns.lineplot(data=q_steps_list, size=0.5, ax=ax3)
 
@@ -156,5 +168,125 @@ def fig_2(n_episodes=100, n_steps=10000):
     sns.barplot(data=df, ax=ax2)
 
     # plot show
+    plt.tight_layout()
+    plt.show()
+
+def move_step_value_trends():
+    """
+    move step value trends diagram
+    1) move step trends over times with various algorithms (incremental val upd; exp recency-weighted avg; beta)
+    """
+    # plots init and config
+    fig, (ax1) = plt.subplots(1, 1, figsize=(8, 5))
+    
+    # 1st diagram format
+    ax1.set_title('Move Step Value Trends', fontsize=10)
+    ax1.set_xlabel('Time', fontsize=8)
+    ax1.set_ylabel('Move step value', fontsize=8)
+    ax1.tick_params(labelsize=6)
+    ax1.grid(True, axis='y', linestyle=':')
+    ax1.legend(loc='lower right', fontsize=7)
+
+    env = MultiArmedBanditEnv(['Dummy'])
+    sample_size = 50
+    sample_list = []
+
+    algo = IncrementalValueUpdAlg(env)
+    sample_list.append(algo.sampling_alpha(sample_size))
+
+    algo = ExpRecencyWeightedAvgAlg(env, step_size=0.1)
+    sample_list.append(algo.sampling_alpha(sample_size))
+
+    algo = BetaMoveStepAlg(env, step_size=0.1)
+    sample_list.append(algo.sampling_alpha(sample_size))
+
+    sns.lineplot(data=sample_list, size=0.5, ax=ax1)
+
+    # plot show
+    plt.tight_layout()
+    plt.show()
+
+def ch2_7(n_episodes=1000, n_steps=1000):
+    """
+    chapter 2.7 (page 36)
+    1) Q trends over steps with various policies (ubc(c=2); e-greedy(0.1))
+    """
+    # plots init and config
+    fig, (ax1) = plt.subplots(1, 1, figsize=(5, 5))
+
+    # 10-armed bandit enviroment
+    n_arm = 10
+    actions_space = ['Arm%d' % i for i in range(n_arm)]
+    env = MultiArmedBanditEnv(actions_space)
+    env.info()
+
+    # params storing
+    q_steps_list = []
+
+    agent = IncrementalValueUpdAlg(env)
+    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e-greedy(0.1)'))
+
+    agent.run_episodes(UpperConfidenceBoundPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='ubc(2)'))
+
+    # plot trends over steps with various policies
+    sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)
+
+    # plot show
+    ax1.set_title('Q Trends', fontsize=10)
+    ax1.set_xlabel('Steps', fontsize=8)
+    ax1.set_ylabel('Q(a)', fontsize=8)
+    ax1.tick_params(labelsize=6)
+    ax1.grid(True, axis='y', linestyle=':')
+    ax1.legend(loc='lower right', fontsize=7)
+
+    plt.tight_layout()
+    plt.show()
+
+def test(n_episodes=100, n_steps=1000):
+    """
+    for test
+    """
+    # plots init and config
+    fig, (ax1) = plt.subplots(1, 1, figsize=(5, 5))
+
+    # 10-armed bandit enviroment
+    n_arm = 10
+    actions_space = ['Arm%d' % i for i in range(n_arm)]
+    env = NonstationaryMultiArmedBanditEnv(actions_space)
+    env.info()
+
+    # params storing
+    q_steps_list = []
+
+    agent = IncrementalValueUpdAlg(env)
+    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='incre, e=0.1'))
+    
+    agent = ExpRecencyWeightedAvgAlg(env)
+    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='exp recency-weighted avg(a=0.1), e=0.1'))
+
+    agent = BetaMoveStepAlg(env)
+    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='beta move step(a=0.1), e=0.1'))
+
+    # plot trends over steps with various policies
+    sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)
+
+    # plot show
+    ax1.set_title('Q Trends', fontsize=10)
+    ax1.set_xlabel('Steps', fontsize=8)
+    ax1.set_ylabel('Q(a)', fontsize=8)
+    ax1.tick_params(labelsize=6)
+    ax1.grid(True, axis='y', linestyle=':')
+    ax1.legend(loc='lower right', fontsize=7)
+
     plt.tight_layout()
     plt.show()
