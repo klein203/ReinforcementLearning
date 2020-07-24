@@ -69,14 +69,17 @@ class BanditAlgorithm(object):
         logging.info('N Mean Value: %s' % n_actions_mean)
 
 
-class ActionValueMethods(BanditAlgorithm):
+class MeanValueUpdAlg(BanditAlgorithm):
+    """
+    Mean Q value update algorithm, basic one
+    """
     def __init__(self, env, *args, **kwargs):
-        super(ActionValueMethods, self).__init__(env, *args, **kwargs)
+        super(MeanValueUpdAlg, self).__init__(env, *args, **kwargs)
         self.name = 'ActionValueMethods'
         self.sum_q = np.zeros(self.k)
     
     def reset(self):
-        super(ActionValueMethods, self).reset()
+        super(MeanValueUpdAlg, self).reset()
         self.sum_q = np.zeros(self.k)
 
     def _update(self, action_idx, action_idx_reward):
@@ -85,9 +88,12 @@ class ActionValueMethods(BanditAlgorithm):
         self.q[action_idx] = self.sum_q[action_idx] / self.n_times[action_idx]
 
 
-class IncrementalImpl(BanditAlgorithm):
+class IncrementalValueUpdAlg(BanditAlgorithm):
+    """
+    Incremental Q value update algorithm.
+    """
     def __init__(self, env, *args, **kwargs):
-        super(IncrementalImpl, self).__init__(env, *args, **kwargs)
+        super(IncrementalValueUpdAlg, self).__init__(env, *args, **kwargs)
         self.name = 'IncrementalImplementation'
     
     def _update(self, action_idx, action_idx_reward):
@@ -95,9 +101,12 @@ class IncrementalImpl(BanditAlgorithm):
         self.q[action_idx] = self.q[action_idx] + 1 / self.n_times[action_idx] * (action_idx_reward - self.q[action_idx])
 
 
-class ExponentialRecencyWeightedAverage(BanditAlgorithm):
+class ExpRecencyWeightedAvgAlg(BanditAlgorithm):
+    """
+    Exponetial recency-weighted average algorithm
+    """
     def __init__(self, env, step_size, *args, **kwargs):
-        super(ExponentialRecencyWeightedAverage, self).__init__(env, *args, **kwargs)
+        super(ExpRecencyWeightedAvgAlg, self).__init__(env, *args, **kwargs)
         self.name = 'ExponentialRecencyWeightedAverage'
         # alpha
         self.step_size = step_size
@@ -148,8 +157,8 @@ def fig_1(n_episodes=100, n_steps=1000):
     df = env.sampling()
     sns.swarmplot(data=df, size=1, ax=ax1)
 
-    # evaluation using incremental implementation algorithm with various policies
-    agent = IncrementalImpl(env)
+    # evaluation using incremental value update algorithm with various policies
+    agent = IncrementalValueUpdAlg(env)
 
     # params storing
     q_steps_list = []
@@ -222,7 +231,7 @@ def fig_2(n_episodes=100, n_steps=10000):
     ax3.grid(True, axis='y', linestyle=':')
     ax3.legend(loc='lower right', fontsize=7)
 
-    # 10-armed bandit enviroment
+    # 10-armed non-stationary bandit enviroment
     n_arm = 10
     actions_space = ['Arm%d' % i for i in range(n_arm)]
     env = NonstationaryMultiArmedBanditEnv(actions_space)
@@ -235,14 +244,14 @@ def fig_2(n_episodes=100, n_steps=10000):
     # params storing
     q_steps_list = []
 
-    # incremental implementation algorithm with e-greedy(0.1) policy
-    agent = IncrementalImpl(env)
+    # incremental implementation Q value update algorithm with e-greedy(0.1) policy
+    agent = IncrementalValueUpdAlg(env)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
     q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='incremental, e-greedy(e=0.1)'))
 
-    # exponential recency weighted average with e-greedy(0.1) policy
-    agent = ExponentialRecencyWeightedAverage(env, step_size=0.1)
+    # exponential recency weighted average algorithm with e-greedy(0.1) policy
+    agent = ExpRecencyWeightedAvgAlg(env, step_size=0.1)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
     q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='step move(a=0.1), e-greedy(e=0.1)'))
@@ -250,7 +259,7 @@ def fig_2(n_episodes=100, n_steps=10000):
     # plot Q trends over steps with various policies
     sns.lineplot(data=q_steps_list, size=0.5, ax=ax3)
 
-    # plot N distribution using exponential recency weighted average with e-greedy(0.1) policy
+    # plot N distribution using exponential recency weighted average algorithm with e-greedy(0.1) policy
     n_actions_mean = np.mean(agent.history.get('N_actions'), axis=0)
     df = pd.DataFrame(data=n_actions_mean.reshape(1, -1), columns=env.actions_space)
     sns.barplot(data=df, ax=ax2)
