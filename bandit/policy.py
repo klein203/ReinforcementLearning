@@ -19,7 +19,7 @@ class RandomPolicy(AbstractPolicy):
     
     def choose(self, q_actions, n_actions, t, *args, **kwargs):
         action_idx = np.random.choice(len(q_actions))
-        return action_idx, q_actions[action_idx]
+        return action_idx, q_actions
 
 
 class EpsilonGreedyPolicy(AbstractPolicy):
@@ -36,7 +36,7 @@ class EpsilonGreedyPolicy(AbstractPolicy):
         else:
             action_idx = np.random.choice(len(q_actions))
         
-        return action_idx, q_actions[action_idx]
+        return action_idx, q_actions
 
 
 class GreedyPolicy(EpsilonGreedyPolicy):
@@ -60,4 +60,15 @@ class UpperConfidenceBoundPolicy(AbstractPolicy):
             # choose argmax(Q_t(a) + c * sqrt(ln(t)/N_t(a)))
             action_idx = np.argmax(q_actions + self.c * np.sqrt(np.log(t) / n_actions))
         
-        return action_idx, q_actions[action_idx]
+        return action_idx, q_actions
+
+
+class SoftmaxPolicy(AbstractPolicy):
+    def __init__(self, *args, **kwargs):
+        super(SoftmaxPolicy, self).__init__(*args, **kwargs)
+        self.name = 'SoftmaxPolicy'
+    
+    def choose(self, h_funcs, *args, **kwargs):
+        p = np.exp(h_funcs) / np.sum(np.exp(h_funcs))
+        action_idx = np.argmax(p)
+        return action_idx, p

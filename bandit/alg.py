@@ -153,3 +153,31 @@ class BetaMoveStepAlg(BanditAlgorithm):
             samples.append(beta)
 
         return pd.Series(samples, name='beta step move')
+
+class GradientAlg(BanditAlgorithm):
+    def __init__(self, env, step_size=0.1, *args, **kwargs):
+        super(GradientAlg, self).__init__(env, *args, **kwargs)
+        self.name = 'GradientAlg'
+        # alpha
+        self.alpha = step_size
+        self.h_func
+
+    # def _update(self, action_idx, action_idx_reward):
+    #     pass
+
+    # def _run(self, policy, i_episode):
+    #     q_step = np.zeros(self.n_steps)
+
+    #     for i_step in range(self.n_steps):
+    #         action_idx, _ = policy.choose(self.q, self.n_times, i_step+1)
+    #         action_idx_reward = self.env.get_reward(action_idx)
+
+    #         self._update(action_idx, action_idx_reward)
+            
+    #         # history gathering
+    #         q_step[i_step] = action_idx_reward
+        
+    #     # Q_step: n_episode x n_step
+    #     self.store_params('Q_steps', i_episode, q_step)
+    #     # N_arm: n_episode x n_arms
+    #     self.store_params('N_actions', i_episode, self.n_times)
