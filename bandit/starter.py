@@ -60,27 +60,27 @@ def ch2_3(n_episodes=100, n_steps=1000):
     # random
     agent.run_episodes(RandomPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='random'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='random'))
 
     # greedy, e=0.0
     agent.run_episodes(GreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='greedy'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='greedy'))
 
     # e-greedy, e=0.01
     agent.run_episodes(EpsilonGreedyPolicy(epsilon=0.01), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.01'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='e=0.01'))
 
     # e-greedy, e=0.5
     agent.run_episodes(EpsilonGreedyPolicy(epsilon=0.5), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.5'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='e=0.5'))
 
     # e-greedy, e=0.1
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e=0.1'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='e=0.1'))
     
     # plot Q trends over steps with various policies
     sns.lineplot(data=q_steps_list, size=0.5, ax=ax3)
@@ -88,7 +88,7 @@ def ch2_3(n_episodes=100, n_steps=1000):
     # plot N distribution using e-greedy(0.1) policy
     # by using e-greedy policy, action reward with higher target mean value in the first place 
     # has much higher possiblity to be choosed
-    n_actions_mean = np.mean(agent.history.get('N_actions'), axis=0)
+    n_actions_mean = np.mean(agent.history.get('NTimes_actions'), axis=0)
     df = pd.DataFrame(data=n_actions_mean.reshape(1, -1), columns=env.actions_space)
     sns.barplot(data=df, ax=ax2)
 
@@ -145,25 +145,25 @@ def ch2_5(n_episodes=100, n_steps=10000):
     agent = IncrementalValueUpdAlg(env)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='incremental, e-greedy(e=0.1)'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='incremental, e-greedy(e=0.1)'))
 
     # exponential recency weighted average algorithm with e-greedy(0.1) policy
     agent = ExpRecencyWeightedAvgAlg(env, step_size=0.1)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='step move(a=0.1), e-greedy(e=0.1)'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='step move(a=0.1), e-greedy(e=0.1)'))
 
     # beta move step algorithm with e-greedy(0.1) policy
     # agent = BetaMoveStepAlg(env, step_size=0.1)
     # agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     # agent.report()
-    # q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='beta step move(a=0.1), e-greedy(e=0.1)'))
+    # q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='beta step move(a=0.1), e-greedy(e=0.1)'))
 
     # plot Q trends over steps with various policies
     sns.lineplot(data=q_steps_list, size=0.5, ax=ax3)
 
     # plot N distribution using exponential recency weighted average algorithm with e-greedy(0.1) policy
-    n_actions_mean = np.mean(agent.history.get('N_actions'), axis=0)
+    n_actions_mean = np.mean(agent.history.get('NTimes_actions'), axis=0)
     df = pd.DataFrame(data=n_actions_mean.reshape(1, -1), columns=env.actions_space)
     sns.barplot(data=df, ax=ax2)
 
@@ -226,11 +226,51 @@ def ch2_7(n_episodes=1000, n_steps=1000):
     agent = IncrementalValueUpdAlg(env)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='e-greedy(0.1)'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='e-greedy(0.1)'))
 
     agent.run_episodes(UpperConfidenceBoundPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='ubc(2)'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='ubc(2)'))
+
+    # plot trends over steps with various policies
+    sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)
+
+    # plot show
+    ax1.set_title('Q Trends', fontsize=10)
+    ax1.set_xlabel('Steps', fontsize=8)
+    ax1.set_ylabel('Q(a)', fontsize=8)
+    ax1.tick_params(labelsize=6)
+    ax1.grid(True, axis='y', linestyle=':')
+    ax1.legend(loc='lower right', fontsize=7)
+
+    plt.tight_layout()
+    plt.show()
+
+def ch2_8(n_episodes=1000, n_steps=1000):
+    """
+    chapter 2.8 (page tbd)
+    1) Q trends over steps with various policies (ubc(c=2); e-greedy(0.1))
+    """
+    # plots init and config
+    fig, (ax1) = plt.subplots(1, 1, figsize=(5, 5))
+
+    # 10-armed bandit enviroment
+    n_arm = 10
+    actions_space = ['Arm%d' % i for i in range(n_arm)]
+    env = MultiArmedBanditEnv(actions_space)
+    env.info()
+
+    # params storing
+    q_steps_list = []
+
+    agent = IncrementalValueUpdAlg(env)
+    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='e-greedy(0.1)'))
+
+    agent.run_episodes(UpperConfidenceBoundPolicy(), n_episodes, n_steps)
+    agent.report()
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='ubc(2)'))
 
     # plot trends over steps with various policies
     sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)
@@ -265,17 +305,17 @@ def test(n_episodes=100, n_steps=1000):
     agent = IncrementalValueUpdAlg(env)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='incre, e=0.1'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='incre, e=0.1'))
     
     agent = ExpRecencyWeightedAvgAlg(env)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='exp recency-weighted avg(a=0.1), e=0.1'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='exp recency-weighted avg(a=0.1), e=0.1'))
 
     agent = BetaMoveStepAlg(env)
     agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q_steps'), axis=0), name='beta move step(a=0.1), e=0.1'))
+    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='beta move step(a=0.1), e=0.1'))
 
     # plot trends over steps with various policies
     sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)

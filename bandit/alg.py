@@ -9,36 +9,22 @@ class BanditAlgorithm(object):
         self.name = 'BanditAlgorithm Abstract'
         self.env = env
         self.k = env.get_k()
-        self.q = np.zeros(self.k)
-        self.n_times = np.zeros(self.k)
+        self.vals = np.zeros(self.k)
+        self.ntimes = np.zeros(self.k)
         self.history = History()
     
     def reset(self):
-        self.q = np.zeros(self.k)
-        self.n_times = np.zeros(self.k)
+        self.vals = np.zeros(self.k)
+        self.ntimes = np.zeros(self.k)
 
     def store_params(self, prop, episode, val):
         self.history.store(prop, episode, val)
     
-    def _update(self, action_idx, action_idx_reward):
+    def _update(self, action, action_reward, *args, **kwargs):
         raise NotImplementedError()
 
     def _run(self, policy, i_episode):
-        q_step = np.zeros(self.n_steps)
-
-        for i_step in range(self.n_steps):
-            action_idx, _ = policy.choose(self.q, self.n_times, i_step+1)
-            action_idx_reward = self.env.get_reward(action_idx)
-
-            self._update(action_idx, action_idx_reward)
-            
-            # history gathering
-            q_step[i_step] = action_idx_reward
-        
-        # Q_step: n_episode x n_step
-        self.store_params('Q_steps', i_episode, q_step)
-        # N_arm: n_episode x n_arms
-        self.store_params('N_actions', i_episode, self.n_times)
+        raise NotImplementedError()
     
     def run_episodes(self, policy, n_episodes=2000, n_steps=1000):
         self.history.clear()
@@ -51,40 +37,70 @@ class BanditAlgorithm(object):
             self._run(policy, i_episode)
             
     def report(self):
+        raise NotImplementedError()
+
+
+class QValueBasedAlg(BanditAlgorithm):
+    def __init__(self, env, *args, **kwargs):
+        super(QValueBasedAlg, self).__init__(env, *args, **kwargs)
+        self.name = 'Q Value Based Algorithm Abstract'
+    
+    def _run(self, policy, i_episode):
+        vals_step = np.zeros(self.n_steps)
+        actions_step = np.zeros(self.n_steps)
+
+        for i_step in range(self.n_steps):
+            # choose A_t and get R_t
+            action, _ = policy.choose(self.vals, self.ntimes, i_step+1)
+            action_reward = self.env.get_reward(action)
+            
+            # history gathering, store action_t and vals_t
+            actions_step[i_step] = action
+            vals_step[i_step] = action_reward
+
+            # Vals_t+1 updating
+            self._update(action, action_reward)
+        
+        # Q_step: n_episode x n_step
+        self.store_params('Q(a)_steps', i_episode, vals_step)
+        # N_arm: n_episode x n_arms
+        self.store_params('NTimes_actions', i_episode, self.ntimes)
+
+    def report(self):
         logging.info('------------------------------------------------------------')
         logging.info("%s_%s_EP%d_ST%d" % (self.name, self.policy.name, self.n_episodes, self.n_steps))
         logging.info('------------------------------------------------------------')
 
-        q_steps = self.history.get('Q_steps')
+        q_steps = self.history.get('Q(a)_steps')
         q_steps_mean = np.mean(q_steps, axis=0)
         logging.debug('Q Mean Value: %s' % q_steps_mean)
         logging.info('Final Q Mean Value: %.4f' % q_steps_mean[-1])
 
-        n_actions = self.history.get('N_actions')
-        n_actions_mean = np.mean(n_actions, axis=0)
-        logging.info('N Mean Value: %s' % n_actions_mean)
+        ntimes_actions = self.history.get('NTimes_actions')
+        ntimes_actions_mean = np.mean(ntimes_actions, axis=0)
+        logging.info('NTimes Mean Value: %s' % ntimes_actions_mean)
 
 
-class MeanValueUpdAlg(BanditAlgorithm):
+class MeanValueUpdAlg(QValueBasedAlg):
     """
     Mean Q value update algorithm, basic one
     """
     def __init__(self, env, *args, **kwargs):
         super(MeanValueUpdAlg, self).__init__(env, *args, **kwargs)
         self.name = 'ActionValueMethods'
-        self.sum_q = np.zeros(self.k)
+        self.vals_sum = np.zeros(self.k)
     
     def reset(self):
         super(MeanValueUpdAlg, self).reset()
-        self.sum_q = np.zeros(self.k)
+        self.vals_sum = np.zeros(self.k)
 
-    def _update(self, action_idx, action_idx_reward):
-        self.sum_q[action_idx] += action_idx_reward
-        self.n_times[action_idx] += 1
-        self.q[action_idx] = self.sum_q[action_idx] / self.n_times[action_idx]
+    def _update(self, action, action_reward):
+        self.vals_sum[action] += action_reward
+        self.ntimes[action] += 1
+        self.vals[action] = self.vals_sum[action] / self.ntimes[action]
 
 
-class IncrementalValueUpdAlg(BanditAlgorithm):
+class IncrementalValueUpdAlg(QValueBasedAlg):
     """
     Incremental Q value update algorithm.
     """
@@ -92,54 +108,66 @@ class IncrementalValueUpdAlg(BanditAlgorithm):
         super(IncrementalValueUpdAlg, self).__init__(env, *args, **kwargs)
         self.name = 'IncrementalImplementation'
     
-    def _update(self, action_idx, action_idx_reward):
-        self.n_times[action_idx] = self.n_times[action_idx] + 1
-        self.q[action_idx] = self.q[action_idx] + 1 / self.n_times[action_idx] * (action_idx_reward - self.q[action_idx])
+    def _update(self, action, action_reward):
+        self.ntimes[action] = self.ntimes[action] + 1
+        self.vals[action] = self.vals[action] + 1 / self.ntimes[action] * (action_reward - self.vals[action])
     
     def sampling_alpha(self, size=1000):
         self.reset()
         return pd.Series([1/i for i in range(1, size+1)], name='incremental val upd')
 
 
-class ExpRecencyWeightedAvgAlg(BanditAlgorithm):
+class ExpRecencyWeightedAvgAlg(QValueBasedAlg):
     """
     Exponetial recency-weighted average algorithm
     """
     def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(ExpRecencyWeightedAvgAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'ExponentialRecencyWeightedAverage'
-        # alpha
-        self.alpha = step_size
+        self.name = 'ExponentialRecencyWeightedAverage'        
+        # alpha, constant
+        self.alpha_ori = step_size
+        self.alpha = self.alpha_ori
 
-    def _update(self, action_idx, action_idx_reward):
+    def reset(self):
+        super(ExpRecencyWeightedAvgAlg, self).reset()
+        self.alpha = self.alpha_ori
+
+    def _update(self, action, action_reward):
         # exponential recency-weighted average: the bigger the i is, the bigger the weight of R_i is
-        self.n_times[action_idx] = self.n_times[action_idx] + 1
-        self.q[action_idx] = self.q[action_idx] + self.alpha * (action_idx_reward - self.q[action_idx])
+        self.ntimes[action] = self.ntimes[action] + 1
+        self.vals[action] = self.vals[action] + self.alpha * (action_reward - self.vals[action])
     
     def sampling_alpha(self, size=1000):
         self.reset()
         return pd.Series([self.alpha] * size, name='exp recency-weighted avg')
 
 
-class BetaMoveStepAlg(BanditAlgorithm):
+class BetaMoveStepAlg(QValueBasedAlg):
     """
     BetaMoveStep algorithm?
-    β = α / ο_n
-    ο_n = ο_n-1 + α * (1 - ο_n-1),  ο_0 = 0
+    ο_t+1 = ο_t + α * (1 - ο_t) = (1 - α) * ο_t + α,  ο_0 = 0
+    β_t+1 = α / ο_t+1
     """
     def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(BetaMoveStepAlg, self).__init__(env, *args, **kwargs)
         self.name = 'BetaMoveStepAlg'
-        # alpha
-        self.alpha = step_size
+        # alpha, constant
+        self.alpha_ori = step_size
+        self.alpha = self.alpha_ori
         self.omicron = np.zeros(self.k)
         self.beta = np.zeros(self.k)
 
-    def _update(self, action_idx, action_idx_reward):
-        self.n_times[action_idx] = self.n_times[action_idx] + 1
-        self.omicron[action_idx] = (1 - self.alpha) * self.omicron[action_idx] + self.alpha
-        self.beta[action_idx] = self.alpha / self.omicron[action_idx]
-        self.q[action_idx] = self.q[action_idx] + self.beta[action_idx] * (action_idx_reward - self.q[action_idx])
+    def reset(self):
+        super(BetaMoveStepAlg, self).reset()
+        self.alpha = self.alpha_ori
+        self.omicron = np.zeros(self.k)
+        self.beta = np.zeros(self.k)
+
+    def _update(self, action, action_reward):
+        self.ntimes[action] = self.ntimes[action] + 1
+        self.omicron[action] = (1 - self.alpha) * self.omicron[action] + self.alpha
+        self.beta[action] = self.alpha / self.omicron[action]
+        self.vals[action] = self.vals[action] + self.beta[action] * (action_reward - self.vals[action])
     
     def sampling_alpha(self, size=1000):
         self.reset()
@@ -154,30 +182,77 @@ class BetaMoveStepAlg(BanditAlgorithm):
 
         return pd.Series(samples, name='beta step move')
 
-class GradientAlg(BanditAlgorithm):
-    def __init__(self, env, step_size=0.1, *args, **kwargs):
-        super(GradientAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'GradientAlg'
-        # alpha
-        self.alpha = step_size
-        self.h_func
 
-    # def _update(self, action_idx, action_idx_reward):
-    #     pass
+class PreferenceBasedAlg(BanditAlgorithm):
+    def __init__(self, env, *args, **kwargs):
+        super(PreferenceBasedAlg, self).__init__(env, *args, **kwargs)
+        self.name = 'Preference H-Func Based Algorithm Abstract'
+        # alpha, constant
+        self.alpha_ori = step_size
+        self.alpha = self.alpha_ori
+        self.probabilities = np.zeros(self.k)
 
-    # def _run(self, policy, i_episode):
-    #     q_step = np.zeros(self.n_steps)
+    def reset(self):
+        super(PreferenceBasedAlg, self).reset()
+        self.alpha = self.alpha_ori
+        self.probabilities = np.zeros(self.k)
 
-    #     for i_step in range(self.n_steps):
-    #         action_idx, _ = policy.choose(self.q, self.n_times, i_step+1)
-    #         action_idx_reward = self.env.get_reward(action_idx)
+    def _update(self, action, action_reward, i_step):
+        raise NotImplementedError()
 
-    #         self._update(action_idx, action_idx_reward)
+    def _run(self, policy, i_episode):
+        vals_step = np.zeros(self.n_steps)
+        actions_step = np.zeros(self.n_steps)
+
+        for i_step in range(self.n_steps):
+            # choose A_t and get R_t
+            action_idx, self.probabilities = policy.choose(self.vals, self.ntimes, i_step+1)
+            action_idx_reward = self.env.get_reward(action_idx)
             
-    #         # history gathering
-    #         q_step[i_step] = action_idx_reward
+            # history gathering, store action_t, val_t
+            actions_step[i_step] = action_idx
+            vals_step[i_step] = action_idx_reward
+
+            # Vals_t+1 updating, (H(a)_t+1 in gradient alg)
+            self._update(action_idx, action_idx_reward, i_step+1)
         
-    #     # Q_step: n_episode x n_step
-    #     self.store_params('Q_steps', i_episode, q_step)
-    #     # N_arm: n_episode x n_arms
-    #     self.store_params('N_actions', i_episode, self.n_times)
+        # H(a)_step: n_episodes x n_steps
+        self.store_params('H(a)_steps', i_episode, vals_step)
+        # N_arm: n_episodes x n_arms
+        self.store_params('NTimes_actions', i_episode, self.ntimes)
+        # action choose per 
+        self.store_params('actions_step', i_episode, actions_step)
+    
+    def report(self):
+        logging.info('------------------------------------------------------------')
+        logging.info("%s_%s_EP%d_ST%d" % (self.name, self.policy.name, self.n_episodes, self.n_steps))
+        logging.info('------------------------------------------------------------')
+
+        vals_steps = self.history.get('H(a)_steps')
+        vals_steps_mean = np.mean(vals_steps, axis=0)
+        logging.debug('H Mean Value: %s' % vals_steps_mean)
+
+        ntimes_actions = self.history.get('NTimes_actions')
+        ntimes_actions_mean = np.mean(ntimes_actions, axis=0)
+        logging.info('NTimes Mean Value: %s' % ntimes_actions_mean)
+
+
+class GradientBanditAlg(PreferenceBasedAlg):
+    def __init__(self, env, step_size=0.1, r_baseline=0.0, *args, **kwargs):
+        super(GradientBanditAlg, self).__init__(env, *args, **kwargs)
+        self.name = 'GradientBanditAlg'
+        # R_t_bar over t time, baseline
+        self.r_baseline_ori = r_baseline
+        self.r_baseline = self.r_baseline_ori
+
+    def reset(self):
+        super(GradientBanditAlg, self).reset()
+        self.r_baseline = self.r_baseline_ori
+
+    def _update(self, action, action_reward, i_step):
+        # update H_t+1
+        self.vals[action] = self.vals[action] + self.alpha * (action_reward - self.r_baseline) * (1 - self.probabilities[action])
+        self.vals[~action] = self.vals[~action] + self.alpha * (action_reward - self.r_baseline) * (-self.probabilities[~action])
+        
+        # update R_t+1_bar
+        self.r_baseline = self.r_baseline + 1 / (i_step+1) * (action_reward - self.r_baseline)
