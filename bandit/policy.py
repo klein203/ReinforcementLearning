@@ -46,8 +46,8 @@ class GreedyPolicy(EpsilonGreedyPolicy):
 class UpperConfidenceBoundPolicy(AbstractPolicy):
     def __init__(self, c=2, *args, **kwargs):
         super(UpperConfidenceBoundPolicy, self).__init__(*args, **kwargs)
-        self.name = 'UpperConfidenceBoundPolicy'
         self.c = c
+        self.name = 'UpperConfidenceBoundPolicy(c=%d)' % self.c
 
     def choose(self, val_actions, ntimes_actions, t, *args, **kwargs):
         # choose action randomly when N(a) == 0

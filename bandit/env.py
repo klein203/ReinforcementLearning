@@ -34,6 +34,12 @@ class MultiArmedBanditEnv(AbstractMultiArmedBanditEnv):
         self.reward_target_dist_mean = np.random.standard_normal(self.k)
         self.reward_target_dist_var = np.ones(self.k)
 
+    def set_reward_target_dist_mean(self, mean=0.0, var=1.0):
+        self.reward_target_dist_mean = np.random.normal(loc=mean, scale=var, size=self.k)
+    
+    def get_reward_target_expectation(self):
+        return self.reward_target_dist_mean
+
     def get_reward(self, action_idx):
         # R(a) ~ N(q*(a), 1)
         loc = self.reward_target_dist_mean[action_idx]

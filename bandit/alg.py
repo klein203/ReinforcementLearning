@@ -20,7 +20,7 @@ class BanditAlgorithm(object):
     def store_params(self, prop, episode, val):
         self.history.store(prop, episode, val)
     
-    def _update(self, action, action_reward, *args, **kwargs):
+    def _update(self, *args, **kwargs):
         raise NotImplementedError()
 
     def _run(self, policy, i_episode):
@@ -65,6 +65,8 @@ class QValueBasedAlg(BanditAlgorithm):
         self.store_params('Q(a)_steps', i_episode, vals_step)
         # N_arm: n_episode x n_arms
         self.store_params('NTimes_actions', i_episode, self.ntimes)
+        # action choose per step: n_episode x n_steps
+        self.store_params('actions_steps', i_episode, actions_step)
 
     def report(self):
         logging.info('------------------------------------------------------------')
@@ -87,7 +89,7 @@ class MeanValueUpdAlg(QValueBasedAlg):
     """
     def __init__(self, env, *args, **kwargs):
         super(MeanValueUpdAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'ActionValueMethods'
+        self.name = 'Naive Mean Value Update Algorithm'
         self.vals_sum = np.zeros(self.k)
     
     def reset(self):
@@ -106,7 +108,7 @@ class IncrementalValueUpdAlg(QValueBasedAlg):
     """
     def __init__(self, env, *args, **kwargs):
         super(IncrementalValueUpdAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'IncrementalImplementation'
+        self.name = 'Incremental Value Update Algorithm'
     
     def _update(self, action, action_reward):
         self.ntimes[action] = self.ntimes[action] + 1
@@ -123,10 +125,10 @@ class ExpRecencyWeightedAvgAlg(QValueBasedAlg):
     """
     def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(ExpRecencyWeightedAvgAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'ExponentialRecencyWeightedAverage'        
         # alpha, constant
         self.alpha_ori = step_size
         self.alpha = self.alpha_ori
+        self.name = 'Exponential Recency Weighted Average Algorithm (a=%.2f)' % self.alpha
 
     def reset(self):
         super(ExpRecencyWeightedAvgAlg, self).reset()
@@ -150,12 +152,12 @@ class BetaMoveStepAlg(QValueBasedAlg):
     """
     def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(BetaMoveStepAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'BetaMoveStepAlg'
         # alpha, constant
         self.alpha_ori = step_size
         self.alpha = self.alpha_ori
         self.omicron = np.zeros(self.k)
-        self.beta = np.zeros(self.k)
+        self.beta = np.zeros(self.k)        
+        self.name = 'Beta Move Step Algorithm (a=%.2f)' % self.alpha
 
     def reset(self):
         super(BetaMoveStepAlg, self).reset()
@@ -184,9 +186,9 @@ class BetaMoveStepAlg(QValueBasedAlg):
 
 
 class PreferenceBasedAlg(BanditAlgorithm):
-    def __init__(self, env, *args, **kwargs):
+    def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(PreferenceBasedAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'Preference H-Func Based Algorithm Abstract'
+        self.name = 'H-Preference Function Based Algorithm Abstract'
         # alpha, constant
         self.alpha_ori = step_size
         self.alpha = self.alpha_ori
@@ -206,22 +208,22 @@ class PreferenceBasedAlg(BanditAlgorithm):
 
         for i_step in range(self.n_steps):
             # choose A_t and get R_t
-            action_idx, self.probabilities = policy.choose(self.vals, self.ntimes, i_step+1)
-            action_idx_reward = self.env.get_reward(action_idx)
+            action, self.probabilities = policy.choose(self.vals, self.ntimes, i_step+1)
+            action_reward = self.env.get_reward(action)
             
             # history gathering, store action_t, val_t
-            actions_step[i_step] = action_idx
-            vals_step[i_step] = action_idx_reward
+            actions_step[i_step] = action
+            vals_step[i_step] = action_reward
 
             # Vals_t+1 updating, (H(a)_t+1 in gradient alg)
-            self._update(action_idx, action_idx_reward, i_step+1)
+            self._update(action, action_reward, i_step+1)
         
         # H(a)_step: n_episodes x n_steps
         self.store_params('H(a)_steps', i_episode, vals_step)
         # N_arm: n_episodes x n_arms
         self.store_params('NTimes_actions', i_episode, self.ntimes)
-        # action choose per 
-        self.store_params('actions_step', i_episode, actions_step)
+        # action choose per step: n_episode x n_steps
+        self.store_params('actions_steps', i_episode, actions_step)
     
     def report(self):
         logging.info('------------------------------------------------------------')
@@ -239,20 +241,23 @@ class PreferenceBasedAlg(BanditAlgorithm):
 
 class GradientBanditAlg(PreferenceBasedAlg):
     def __init__(self, env, step_size=0.1, r_baseline=0.0, *args, **kwargs):
-        super(GradientBanditAlg, self).__init__(env, *args, **kwargs)
-        self.name = 'GradientBanditAlg'
+        super(GradientBanditAlg, self).__init__(env, step_size, *args, **kwargs)
         # R_t_bar over t time, baseline
         self.r_baseline_ori = r_baseline
         self.r_baseline = self.r_baseline_ori
+        self.name = 'H-Preference Gradient Bandit Algorithm (a=%.2f, r=%.2f)' % (self.alpha, self.r_baseline)
 
     def reset(self):
         super(GradientBanditAlg, self).reset()
         self.r_baseline = self.r_baseline_ori
 
     def _update(self, action, action_reward, i_step):
+        self.ntimes[action] = self.ntimes[action] + 1
+
         # update H_t+1
         self.vals[action] = self.vals[action] + self.alpha * (action_reward - self.r_baseline) * (1 - self.probabilities[action])
-        self.vals[~action] = self.vals[~action] + self.alpha * (action_reward - self.r_baseline) * (-self.probabilities[~action])
+        self.vals[:action] = self.vals[:action] - self.alpha * (action_reward - self.r_baseline) * self.probabilities[:action]
+        self.vals[action+1:] = self.vals[action+1:] - self.alpha * (action_reward - self.r_baseline) * self.probabilities[action+1:]
         
         # update R_t+1_bar
         self.r_baseline = self.r_baseline + 1 / (i_step+1) * (action_reward - self.r_baseline)

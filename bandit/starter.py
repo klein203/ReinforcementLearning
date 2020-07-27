@@ -4,8 +4,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 from bandit.env import MultiArmedBanditEnv, NonstationaryMultiArmedBanditEnv
-from bandit.policy import EpsilonGreedyPolicy, GreedyPolicy, RandomPolicy, UpperConfidenceBoundPolicy
-from bandit.alg import IncrementalValueUpdAlg, ExpRecencyWeightedAvgAlg, BetaMoveStepAlg
+from bandit.policy import EpsilonGreedyPolicy, GreedyPolicy, RandomPolicy, UpperConfidenceBoundPolicy, SoftmaxPolicy
+from bandit.alg import IncrementalValueUpdAlg, ExpRecencyWeightedAvgAlg, BetaMoveStepAlg, GradientBanditAlg
 
 
 def ch2_3(n_episodes=100, n_steps=1000):
@@ -248,8 +248,8 @@ def ch2_7(n_episodes=1000, n_steps=1000):
 
 def ch2_8(n_episodes=1000, n_steps=1000):
     """
-    chapter 2.8 (page tbd)
-    1) Q trends over steps with various policies (ubc(c=2); e-greedy(0.1))
+    chapter 2.8 (page 38)
+    1) % optimal action over steps (gradient algo: a=0.1/0.4 with/without baseline)
     """
     # plots init and config
     fig, (ax1) = plt.subplots(1, 1, figsize=(5, 5))
@@ -258,27 +258,49 @@ def ch2_8(n_episodes=1000, n_steps=1000):
     n_arm = 10
     actions_space = ['Arm%d' % i for i in range(n_arm)]
     env = MultiArmedBanditEnv(actions_space)
+    env.set_reward_target_dist_mean(4.0, 1.0)
     env.info()
+    optimal_action = np.argmax(env.get_reward_target_expectation())
+    logging.info('Optimal Action Index = %d' % optimal_action)
 
     # params storing
-    q_steps_list = []
+    optimal_actions_percentage = []
 
-    agent = IncrementalValueUpdAlg(env)
-    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent = GradientBanditAlg(env, step_size=0.1, r_baseline=0)
+    agent.run_episodes(SoftmaxPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='e-greedy(0.1)'))
+    # optimal_action = np.argmax(np.mean(agent.history.get('NTimes_actions'), axis=0))
+    actions_steps = agent.history.get('actions_steps')
+    optimal_actions_percentage.append(pd.Series(np.mean((actions_steps==optimal_action), axis=0), name='a=0.1 without baseline'))
 
-    agent.run_episodes(UpperConfidenceBoundPolicy(), n_episodes, n_steps)
+    agent = GradientBanditAlg(env, step_size=0.1, r_baseline=4)
+    agent.run_episodes(SoftmaxPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='ubc(2)'))
+    # optimal_action = np.argmax(np.mean(agent.history.get('NTimes_actions'), axis=0))
+    actions_steps = agent.history.get('actions_steps')
+    optimal_actions_percentage.append(pd.Series(np.mean((actions_steps==optimal_action), axis=0), name='a=0.1 with baseline'))
 
-    # plot trends over steps with various policies
-    sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)
+    agent = GradientBanditAlg(env, step_size=0.4, r_baseline=0)
+    agent.run_episodes(SoftmaxPolicy(), n_episodes, n_steps)
+    agent.report()
+    # optimal_action = np.argmax(np.mean(agent.history.get('NTimes_actions'), axis=0))
+    actions_steps = agent.history.get('actions_steps')
+    optimal_actions_percentage.append(pd.Series(np.mean((actions_steps==optimal_action), axis=0), name='a=0.4 without baseline'))
+
+    agent = GradientBanditAlg(env, step_size=0.4, r_baseline=4)
+    agent.run_episodes(SoftmaxPolicy(), n_episodes, n_steps)
+    agent.report()
+    # optimal_action = np.argmax(np.mean(agent.history.get('NTimes_actions'), axis=0))
+    actions_steps = agent.history.get('actions_steps')
+    optimal_actions_percentage.append(pd.Series(np.mean((actions_steps==optimal_action), axis=0), name='a=0.4 with baseline'))
+
+    # plot trends
+    sns.lineplot(data=optimal_actions_percentage, size=0.5, ax=ax1)
 
     # plot show
-    ax1.set_title('Q Trends', fontsize=10)
+    ax1.set_title('Optimal Actions Percentage', fontsize=10)
     ax1.set_xlabel('Steps', fontsize=8)
-    ax1.set_ylabel('Q(a)', fontsize=8)
+    ax1.set_ylabel('% Optimal Actions', fontsize=8)
     ax1.tick_params(labelsize=6)
     ax1.grid(True, axis='y', linestyle=':')
     ax1.legend(loc='lower right', fontsize=7)
@@ -290,43 +312,20 @@ def test(n_episodes=100, n_steps=1000):
     """
     for test
     """
-    # plots init and config
-    fig, (ax1) = plt.subplots(1, 1, figsize=(5, 5))
-
-    # 10-armed bandit enviroment
     n_arm = 10
     actions_space = ['Arm%d' % i for i in range(n_arm)]
-    env = NonstationaryMultiArmedBanditEnv(actions_space)
+    env = MultiArmedBanditEnv(actions_space)
+    env.set_reward_target_dist_mean(4.0, 1.0)
     env.info()
+    optimal_action = np.argmax(env.get_reward_target_expectation())
+    logging.info('Optimal Action Index = %d' % optimal_action)
 
-    # params storing
-    q_steps_list = []
-
-    agent = IncrementalValueUpdAlg(env)
-    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
+    agent = GradientBanditAlg(env, step_size=0.1, r_baseline=4)
+    agent.run_episodes(SoftmaxPolicy(), n_episodes, n_steps)
     agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='incre, e=0.1'))
+    # actions_steps = agent.history.get('actions_steps')
+    # logging.info(np.mean((actions_steps==optimal_action), axis=0))
     
-    agent = ExpRecencyWeightedAvgAlg(env)
-    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
-    agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='exp recency-weighted avg(a=0.1), e=0.1'))
-
-    agent = BetaMoveStepAlg(env)
-    agent.run_episodes(EpsilonGreedyPolicy(), n_episodes, n_steps)
-    agent.report()
-    q_steps_list.append(pd.Series(np.mean(agent.history.get('Q(a)_steps'), axis=0), name='beta move step(a=0.1), e=0.1'))
-
-    # plot trends over steps with various policies
-    sns.lineplot(data=q_steps_list, size=0.5, ax=ax1)
-
-    # plot show
-    ax1.set_title('Q Trends', fontsize=10)
-    ax1.set_xlabel('Steps', fontsize=8)
-    ax1.set_ylabel('Q(a)', fontsize=8)
-    ax1.tick_params(labelsize=6)
-    ax1.grid(True, axis='y', linestyle=':')
-    ax1.legend(loc='lower right', fontsize=7)
-
-    plt.tight_layout()
-    plt.show()
+    # hs = agent.history.get('H(a)_steps')
+    # logging.info(hs)
+    

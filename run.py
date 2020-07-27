@@ -8,5 +8,6 @@ if __name__ == "__main__":
     # ch2.ch2_5(100, 10000)
     # ch2.move_step_value_trends()
     # ch2.ch2_7(10, 1000)
+    # ch2.ch2_8(200, 5000)
     
-    # ch2.test(2000, 2000)
+    ch2.test(10, 10000)
