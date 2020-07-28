@@ -121,7 +121,7 @@ class IncrementalValueUpdAlg(QValueBasedAlg):
 
 class ExpRecencyWeightedAvgAlg(QValueBasedAlg):
     """
-    Exponetial recency-weighted average algorithm
+    Exponential recency-weighted average algorithm
     """
     def __init__(self, env, step_size=0.1, *args, **kwargs):
         super(ExpRecencyWeightedAvgAlg, self).__init__(env, *args, **kwargs)
