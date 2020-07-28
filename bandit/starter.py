@@ -260,7 +260,7 @@ def ch2_8(n_episodes=1000, n_steps=1000):
     env = MultiArmedBanditEnv(actions_space)
     env.set_reward_target_dist_mean(4.0, 1.0)
     env.info()
-    optimal_action = np.argmax(env.get_reward_target_expectation())
+    optimal_action = env.get_optimal_target_action()
     logging.info('Optimal Action Index = %d' % optimal_action)
 
     # params storing
@@ -315,12 +315,12 @@ def test(n_episodes=100, n_steps=1000):
     n_arm = 10
     actions_space = ['Arm%d' % i for i in range(n_arm)]
     env = MultiArmedBanditEnv(actions_space)
-    env.set_reward_target_dist_mean(4.0, 1.0)
+    env.set_reward_target_dist_mean(0.0, 1.0)
     env.info()
-    optimal_action = np.argmax(env.get_reward_target_expectation())
+    optimal_action = env.get_optimal_target_action()
     logging.info('Optimal Action Index = %d' % optimal_action)
 
-    agent = GradientBanditAlg(env, step_size=0.1, r_baseline=4)
+    agent = GradientBanditAlg(env, step_size=0.1, r_baseline=0)
     agent.run_episodes(SoftmaxPolicy(), n_episodes, n_steps)
     agent.report()
     # actions_steps = agent.history.get('actions_steps')

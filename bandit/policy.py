@@ -68,5 +68,5 @@ class SoftmaxPolicy(AbstractPolicy):
     
     def choose(self, val_actions, ntimes_actions, *args, **kwargs):
         probabilities = np.exp(val_actions) / np.sum(np.exp(val_actions))
-        actual = np.argmax(probabilities)
+        actual = np.random.choice(range(len(val_actions)), p=probabilities)
         return actual, probabilities
