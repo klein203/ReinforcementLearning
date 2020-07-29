@@ -41,11 +41,13 @@ actions_space = ['search', 'wait', 'recharge']
 
 mdp = MDP(states_space, actions_space, p_data, r_data, discount_factor=0.9, init_state=0, terminal_states=[1])
 
-actions_probs = mdp.get_actions_probs(1)
-
+s = 1
+actions_probs = mdp.get_actions_probs(s)
+print(actions_probs)
 
 policy = RandomPolicy()
-policy.choose(actions_probs)
+a = policy.choose(actions_probs)
+print(a)
 
-print(actions)
-print(actions_probs)
+s_ = mdp.get_next_state(s, a)
+print(s_)

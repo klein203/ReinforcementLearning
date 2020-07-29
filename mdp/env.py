@@ -1,6 +1,10 @@
 import logging
+import time
+import tkinter as tk
 import numpy as np
 import pandas as pd
+import itertools as iter
+
 
 class MarkovDecisionProcess(object):
     """
@@ -41,7 +45,7 @@ class MarkovDecisionProcess(object):
     
     def p(self, s, a, s_):
         df = self.p_df
-        filter_df = df[(df['s']==s)&(df['a']==a)&(df['s_']==s_)]
+        filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
         if filter_df.empty:
             if s < 0 or s >= self.n_states:
                 raise Exception('invalid s=%s' % s)
@@ -55,7 +59,7 @@ class MarkovDecisionProcess(object):
     
     def r(self, s, a, s_):
         df = self.r_df
-        filter_df = df[(df['s']==s)&(df['a']==a)&(df['s_']==s_)]
+        filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
         if filter_df.empty:
             if s < 0 or s >= self.n_states:
                 raise Exception('invalid s=%s' % s)
@@ -72,6 +76,12 @@ class MarkovDecisionProcess(object):
         filter_df = df[(df['s']==s)]
         return filter_df[['a', 'p']] 
     
+    def get_next_state(self, s, a):
+        df = self.p_df
+        filter_df = df[(df['s']==s) & (df['a']==a)][['s_', 'p']]
+        
+        return np.random.choice(filter_df['s_'], p=filter_df['p'])
+    
     def is_terminal(self, s):
         if s not in self.states_space:
             raise Exception('invalid s=%s' % s)
@@ -81,8 +91,127 @@ class MarkovDecisionProcess(object):
     #     df = self.p_df
     #     filter_df = df[(df['s']==s)]
     #     return filter_df[['a', 's_', 'p']]
+    
+    def move_step(self, s, a):
+        s_ = self.get_next_state(s, a)
+        r = self.r(s, a, s_)
+        done = self.is_terminal(s_)
+        
+        return s_, r, done
 
-    def move(self):
-        limited_move = 1000
-        # while True:
 
+class Maze2DEnv(tk.Tk):
+    def __init__(self, config, *args, **kwargs):
+        # tk init
+        super(Maze2DEnv, self).__init__(*args, **kwargs)
+        self.win_title_name = config.get('title_name', 'Maze2D')
+        self.title(self.win_title_name)
+        
+        # render frequency, default 0.5s for rendering interval
+        self.win_refresh_interval = config.get('refresh_interval', 0.5)
+        
+        # unit grid pixel
+        self.u_px = config.get('unit_pixel', 35)
+        
+        # 2D shape, eg: cols x rows: 5 x 4
+        self.maze_shape = config.get('shape', (5, 4))
+        self.maze_ncols = self.maze_shape[0]
+        self.maze_nrows = self.maze_shape[1]
+
+        # entry, miners, exit in maze
+        self.maze_objects = config.get('maze_objects', {(self.maze_ncols-1, self.maze_nrows-1): 'exit'})
+        self.origin = config.get('origin', (0, 0))
+
+        scn_w_px, scn_h_px = self.winfo_screenwidth(), self.winfo_screenheight()
+        win_w_px, win_h_px = self.maze_ncols * self.u_px, self.maze_nrows * self.u_px
+        self.geometry('%dx%d+%d+%d' % (win_w_px, win_h_px, scn_w_px - win_w_px, scn_h_px - win_h_px))
+
+        # observation, default (0, 0) (from the very left/top position)
+        self.obs = self.origin
+
+        self.manul_mode = True
+
+        # init MDP
+        actions_space = ['l', 'r', 'u', 'd']
+        states_space = list(iter.product(range(self.maze_ncols), range(self.maze_nrows)))
+        init_state = self.origin
+        terminal_states = list(self.maze_objects.keys())
+        p_data = config.get('transit_matrix', None)
+        r_data = config.get('reward_matrix', None)
+
+        self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data, r_data, init_state=init_state, terminal_states=terminal_states)
+
+        # draw maze
+        self.draw_maze();
+    
+    def reset(self):
+        # reset observation
+        self.obs = self.origin
+        self.render()
+        return self.obs
+
+    def draw_maze(self):
+        # canvas
+        self.canvas = tk.Canvas(self, bg='white',
+                                width=self.maze_ncols * self.u_px,
+                                height=self.maze_nrows * self.u_px)
+        self.canvas.pack()
+        self.redraw_all(self.canvas)
+
+    def redraw_all(self, canvas):
+        # clear all objects on the canvas
+        canvas.delete("all")
+        
+        # draw grids
+        for x in range(0, self.maze_ncols * self.u_px, self.u_px):
+            x0, y0, x1, y1 = x, 0, x, self.maze_nrows * self.u_px
+            canvas.create_line(x0, y0, x1, y1)
+        for y in range(0, self.maze_nrows * self.u_px, self.u_px):
+            x0, y0, x1, y1 = 0, y, self.maze_ncols * self.u_px, y
+            canvas.create_line(x0, y0, x1, y1)
+            
+        # draw mines, black square
+        # draw treasure, yellow square
+        for pos, obj in self.maze_objects.items():
+            color = 'black'
+            if obj == 'treasure':
+                color = 'yellow'
+            elif obj == 'mine':
+                color = 'black'
+            else:
+                raise Exception('invalid maze object')
+                
+            canvas.create_rectangle(
+                pos[0] * self.u_px + 2,
+                pos[1] * self.u_px + 2,
+                (pos[0] + 1) * self.u_px - 2,
+                (pos[1] + 1) * self.u_px - 2,
+                fill=color)
+
+        # draw obs, grey square
+        canvas.create_rectangle(
+            self.obs[0] * self.u_px + 2,
+            self.obs[1] * self.u_px + 2,
+            (self.obs[0] + 1) * self.u_px - 2,
+            (self.obs[1] + 1) * self.u_px - 2,
+            fill='grey')
+        
+    def render(self):
+        time.sleep(self.refresh_interval)
+        self.redraw_all(self.canvas)
+        self.update()
+    
+    def enable_manual_mode(self):
+        self.manul_mode = True
+        # self.canvas.bind
+    
+    def get_object(self, s):
+        return self.maze_objects.get(s)
+
+    def move_step(self, a):
+        s_, r, done = super(Maze2DEnv, self).move_step(self.obs, a)
+        self.obs = s_
+        return s_, r, done
+
+    def bind_func(msg, func):
+        self.canvas.bind(msg, func)

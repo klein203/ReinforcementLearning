@@ -19,9 +19,7 @@ class RandomPolicy(AbstractPolicy):
     
     def choose(self, actions_probs, *args, **kwargs):
         actions = actions_probs['a'].unique()
-        action = np.random.choice(actions)
-
-        return actual, val_actions
+        return np.random.choice(actions)
 
 
 # class EpsilonGreedyPolicy(AbstractPolicy):

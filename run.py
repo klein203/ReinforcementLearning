@@ -1,5 +1,6 @@
 import logging
 import bandit.starter as ch2
+import mdp.starter as ch3
 
 if __name__ == "__main__":
     # log to console
@@ -13,4 +14,4 @@ if __name__ == "__main__":
     # ch2.ch2_7(10, 1000)
     # ch2.ch2_8(1000, 1000)
     
-    ch2.test(1, 1000)
+    ch3.test_human()
