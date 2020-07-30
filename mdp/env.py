@@ -4,6 +4,7 @@ import tkinter as tk
 import numpy as np
 import pandas as pd
 import itertools as iter
+import queue
 
 
 class MarkovDecisionProcess(object):
@@ -17,8 +18,8 @@ class MarkovDecisionProcess(object):
         """
         self.states_space = states_space
         self.actions_space = actions_space
-        self.p_df = pd.DataFrame(data=p_df, columns=['s', 'a', 's_', 'p'])
-        self.r_df = pd.DataFrame(data=r_df, columns=['s', 'a', 's_', 'r'])
+        self.p_df = pd.DataFrame(data=p_df, columns=['s', 'a', 's_', 'p']).astype({'s': int, 'a': int, 's_': int, 'p': float})
+        self.r_df = pd.DataFrame(data=r_df, columns=['s', 'a', 's_', 'r']).astype({'s': int, 'a': int, 's_': int, 'r': float})
         self.gamma = discount_factor
         self.init_state = init_state
         self.terminal_states = terminal_states
@@ -55,7 +56,7 @@ class MarkovDecisionProcess(object):
                 raise Exception('invalid s_=%s' % s_)
 
             raise Exception('invalid p(%s|%s, %s)=p(%s|%s, %s)' % (self.states_space[s_], self.states_space[s], self.actions_space[a], s_, s, a))
-        return filter_df['p'][0]
+        return filter_df['p'].values[0]
     
     def r(self, s, a, s_):
         df = self.r_df
@@ -69,7 +70,7 @@ class MarkovDecisionProcess(object):
                 raise Exception('invalid s_=%s' % s_)
 
             raise Exception('invalid r(%s|%s, %s)=r(%s|%s, %s)' % (self.states_space[s_], self.states_space[s], self.actions_space[a], s_, s, a))
-        return filter_df['r'][0]
+        return filter_df['r'].values[0]
 
     def get_actions_probs(self, s):
         df = self.p_df
@@ -79,13 +80,12 @@ class MarkovDecisionProcess(object):
     def get_next_state(self, s, a):
         df = self.p_df
         filter_df = df[(df['s']==s) & (df['a']==a)][['s_', 'p']]
-        
         return np.random.choice(filter_df['s_'], p=filter_df['p'])
     
     def is_terminal(self, s):
-        if s not in self.states_space:
+        if s < 0 and s >= self.n_states:
             raise Exception('invalid s=%s' % s)
-        return s in self.terminal_states
+        return (s in self.terminal_states)
 
     # def get_available_actions(self, s):
     #     df = self.p_df
@@ -129,38 +129,47 @@ class Maze2DEnv(tk.Tk):
         # observation, default (0, 0) (from the very left/top position)
         self.obs = self.origin
 
-        self.manul_mode = True
+        self.manual_mode = False
 
         # init MDP
         actions_space = ['l', 'r', 'u', 'd']
         states_space = list(iter.product(range(self.maze_ncols), range(self.maze_nrows)))
-        init_state = self.origin
-        terminal_states = list(self.maze_objects.keys())
+        init_state = self._coord_to_s(self.origin)
+        terminal_states = [self._coord_to_s(coord) for coord in self.maze_objects.keys()]
         p_data = config.get('transit_matrix', None)
         r_data = config.get('reward_matrix', None)
 
         self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data, r_data, init_state=init_state, terminal_states=terminal_states)
 
         # draw maze
-        self.draw_maze();
+        self.canvas = tk.Canvas(self, bg='white',
+                                width=self.maze_ncols * self.u_px,
+                                height=self.maze_nrows * self.u_px)
+        self.canvas.pack()
+        self.redraw_all(self.canvas)
+        self.update()
     
     def reset(self):
         # reset observation
         self.obs = self.origin
         self.render()
         return self.obs
+    
+    def redraw_obs(self, canvas):
+        if self.obs_canvas != None:
+            canvas.delete(self.obs_canvas)
+        
+        self.obs_canvas = canvas.create_rectangle(
+            self.obs[0] * self.u_px + 2,
+            self.obs[1] * self.u_px + 2,
+            (self.obs[0] + 1) * self.u_px - 2,
+            (self.obs[1] + 1) * self.u_px - 2,
+            fill='grey')
 
-    def draw_maze(self):
-        # canvas
-        self.canvas = tk.Canvas(self, bg='white',
-                                width=self.maze_ncols * self.u_px,
-                                height=self.maze_nrows * self.u_px)
-        self.canvas.pack()
-        self.redraw_all(self.canvas)
 
     def redraw_all(self, canvas):
         # clear all objects on the canvas
-        canvas.delete("all")
+        # canvas.delete("all")
         
         # draw grids
         for x in range(0, self.maze_ncols * self.u_px, self.u_px):
@@ -182,36 +191,76 @@ class Maze2DEnv(tk.Tk):
                 raise Exception('invalid maze object')
                 
             canvas.create_rectangle(
-                pos[0] * self.u_px + 2,
+                pos[0] * self.u_px + 2, 
                 pos[1] * self.u_px + 2,
                 (pos[0] + 1) * self.u_px - 2,
                 (pos[1] + 1) * self.u_px - 2,
                 fill=color)
 
         # draw obs, grey square
-        canvas.create_rectangle(
+        self.obs_canvas = canvas.create_rectangle(
             self.obs[0] * self.u_px + 2,
             self.obs[1] * self.u_px + 2,
             (self.obs[0] + 1) * self.u_px - 2,
             (self.obs[1] + 1) * self.u_px - 2,
             fill='grey')
-        
+
     def render(self):
-        time.sleep(self.refresh_interval)
-        self.redraw_all(self.canvas)
+        time.sleep(self.win_refresh_interval)
+        self.redraw_obs(self.canvas)
         self.update()
     
-    def enable_manual_mode(self):
-        self.manul_mode = True
-        # self.canvas.bind
+    def get_object(self, obs):
+        return self.maze_objects.get(obs)
+
+    def _coord_to_s(self, obs):
+        return self.maze_ncols * obs[1] + obs[0]
+
+    def _s_to_coord(self, s):
+        obs = [s%self.maze_ncols, s//self.maze_ncols]
+        return tuple(obs)
     
-    def get_object(self, s):
-        return self.maze_objects.get(s)
-
     def move_step(self, a):
-        s_, r, done = super(Maze2DEnv, self).move_step(self.obs, a)
-        self.obs = s_
-        return s_, r, done
+        s_, _, done = self.mdp.move_step(self._coord_to_s(self.obs), a)
+        self.obs = self._s_to_coord(s_)
+        return self.obs, done
 
-    def bind_func(msg, func):
-        self.canvas.bind(msg, func)
+    def bind_handler(event, handler, *args, **kwargs):
+        self.bind(event, handler, *args, **kwargs)
+
+    def disable_manual_mode(self):
+        self.manual_mode = False
+        self.action_buffer = None
+        self.unbind('<KeyPress>', self.keypress_handler)
+
+    def enable_manual_mode(self):
+        self.manual_mode = True
+        self.action_buffer = queue.Queue(1)
+        self.bind('<KeyPress>', self.keypress_handler)
+
+    def keypress_handler(self, event):
+        a = None
+        if event.keysym in ['Left', 'a', 'A']:
+            a = 0
+        elif event.keysym in ['Right', 'd', 'D']:
+            a = 1
+        elif event.keysym in ['Up', 'w', 'W']:
+            a = 2
+        elif event.keysym in ['Down', 's', 'S']:
+            a = 3
+
+        if a != None:
+            if not self.action_buffer.full():
+                self.action_buffer.put_nowait(a)
+            else:
+                # ignore key pressed
+                pass
+    
+    def get_queue_action(self):
+        if self.manual_mode:
+            if self.action_buffer.empty():
+                return None
+            else:
+                return self.action_buffer.get_nowait()
+        
+        return None

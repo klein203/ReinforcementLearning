@@ -186,6 +186,6 @@ default_maze_config = {
         [19, 2, 14, 0],
         [19, 3, 19, 1],
     ],
-    'refresh_interval': 0.5,
+    'refresh_interval': 0.2,
     'unit_pixel': 35,
 }

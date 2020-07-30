@@ -1,5 +1,4 @@
 import logging
-import queue
 
 
 class AbstractAgent(object):
@@ -13,41 +12,21 @@ class AbstractAgent(object):
 class InteractiveAgent(AbstractAgent):
     def __init__(self, env, *args, **kwargs):
         super(InteractiveAgent, self).__init__(env, *args, **kwargs)
-        self.input_buffer = queue.Queue(1)
-        self.env.bind_func('<KeyPress>', self.bind_func)
-
-    def bind_func(self, event):
-        a = self.choose_action(event)
-        if action != None:
-            self.input_buffer.put(a)
-
-    def choose_action(self, event):
-        action = None
-        if event.keysym in ['Left', 'a', 'A']:
-            action = 0
-        elif event.keysym in ['Right', 'd', 'D']:
-            action = 1
-        elif event.keysym in ['Up', 'w', 'W']:
-            action = 2
-        elif event.keysym in ['Down', 's', 'S']:
-            action = 3
-        return action
     
-    def play(self):
-        s = self.env.reset()
+    def _play(self):
+        obs = self.env.reset()
         while True:
             self.env.render()
 
-            # wait valid keypress
-            if self.input_buffer.empty():
+            # fetch valid keypress from queue in env
+            a = self.env.get_queue_action()
+            if a == None:
                 continue
-            else:
-                a = self.input_buffer.get()
             
-            s_, r, done = self.env.move_step(a)
+            obs_, done = self.env.move_step(a)
             
             if done:
-                obj = self.env.get_object(s_)
+                obj = self.env.get_object(obs_)
                 if obj == 'treasure':
                     disp_state = 'WIN'
                 else:
@@ -57,6 +36,11 @@ class InteractiveAgent(AbstractAgent):
                 self.env.render()
                 break
 
-            s = s_
-        
-        env.destroy()
+            obs = obs_
+
+        # self.env.destroy()
+
+    def play(self):
+        self.env.enable_manual_mode()
+        self.env.after(100, self._play)
+        self.env.mainloop()
