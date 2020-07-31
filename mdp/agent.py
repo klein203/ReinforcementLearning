@@ -19,15 +19,15 @@ class InteractiveAgent(AbstractAgent):
             self.env.render()
 
             # fetch valid keypress from queue in env
-            a = self.env.get_queue_action()
-            if a == None:
+            action = self.env.get_queue_action()
+            if action == None:
                 continue
             
-            obs_, done = self.env.move_step(a)
+            obs_, done = self.env.move_step(action)
             
             if done:
                 obj = self.env.get_object(obs_)
-                if obj == 'treasure':
+                if obj == 'exit':
                     disp_state = 'WIN'
                 else:
                     disp_state = 'BUSTED'

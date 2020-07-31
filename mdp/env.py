@@ -11,7 +11,7 @@ class MarkovDecisionProcess(object):
     """
     Markov Decision Process <S, A, P, R, γ>
     """
-    def __init__(self, states_space, actions_space, p_df, r_df, discount_factor=0.9, init_state=None, terminal_states=None):
+    def __init__(self, states_space, actions_space, p_df, r_df, discount_factor=0.9):
         """
         p_df is a pd.DataFrame like structure with columns ['s', 'a', 's_', 'p']
         r_df is a pd.DataFrame like structure with columns ['s', 'a', 's_', 'r']
@@ -21,8 +21,6 @@ class MarkovDecisionProcess(object):
         self.p_df = pd.DataFrame(data=p_df, columns=['s', 'a', 's_', 'p']).astype({'s': int, 'a': int, 's_': int, 'p': float})
         self.r_df = pd.DataFrame(data=r_df, columns=['s', 'a', 's_', 'r']).astype({'s': int, 'a': int, 's_': int, 'r': float})
         self.gamma = discount_factor
-        self.init_state = init_state
-        self.terminal_states = terminal_states
     
     @property
     def states(self):
@@ -45,6 +43,10 @@ class MarkovDecisionProcess(object):
         return len(self.actions_space)
     
     def p(self, s, a, s_):
+        """
+        transit probabilities matrix, p(s_ | s, a)
+        (s:int, a:int, s_:int) -> p:float
+        """
         df = self.p_df
         filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
         if filter_df.empty:
@@ -59,6 +61,10 @@ class MarkovDecisionProcess(object):
         return filter_df['p'].values[0]
     
     def r(self, s, a, s_):
+        """
+        reward table, r(s_ | s, a)
+        (s:int, a:int, s_:int) -> r:float
+        """
         df = self.r_df
         filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
         if filter_df.empty:
@@ -73,24 +79,38 @@ class MarkovDecisionProcess(object):
         return filter_df['r'].values[0]
 
     def get_actions_probs(self, s):
+        """
+        s:int -> df:pd.DataFrame(['a', 'p'])
+        """
         df = self.p_df
         filter_df = df[(df['s']==s)]
         return filter_df[['a', 'p']] 
     
     def get_next_state(self, s, a):
+        """
+        (s:int, a:int) -> s_:int
+        """
         df = self.p_df
         filter_df = df[(df['s']==s) & (df['a']==a)][['s_', 'p']]
         return np.random.choice(filter_df['s_'], p=filter_df['p'])
     
     def is_terminal(self, s):
+        """
+        s:int -> b:bool
+        """
         if s < 0 and s >= self.n_states:
             raise Exception('invalid s=%s' % s)
-        return (s in self.terminal_states)
 
-    # def get_available_actions(self, s):
+        df = self.p_df
+        filter_df = df[(df['s']==s)]
+        if filter_df.empty:
+            return True
+        else:
+            return False
+    
+    # def get_terminals(self):
     #     df = self.p_df
-    #     filter_df = df[(df['s']==s)]
-    #     return filter_df[['a', 's_', 'p']]
+    #     filter_df = df[~df['s'].isin(range(self.n_states))]
     
     def move_step(self, s, a):
         s_ = self.get_next_state(s, a)
@@ -120,34 +140,58 @@ class Maze2DEnv(tk.Tk):
 
         # entry, miners, exit in maze
         self.maze_objects = config.get('maze_objects', {(self.maze_ncols-1, self.maze_nrows-1): 'exit'})
+        maze_controllers = config.get('maze_controllers', None)
+        self.controllers = maze_controllers
+        self.key_bindings = self._bind_keys(maze_controllers)
         self.origin = config.get('origin', (0, 0))
 
         scn_w_px, scn_h_px = self.winfo_screenwidth(), self.winfo_screenheight()
         win_w_px, win_h_px = self.maze_ncols * self.u_px, self.maze_nrows * self.u_px
         self.geometry('%dx%d+%d+%d' % (win_w_px, win_h_px, scn_w_px - win_w_px, scn_h_px - win_h_px))
 
+        self.manual_mode = False
+
         # observation, default (0, 0) (from the very left/top position)
         self.obs = self.origin
 
-        self.manual_mode = False
-
         # init MDP
-        actions_space = ['l', 'r', 'u', 'd']
-        states_space = list(iter.product(range(self.maze_ncols), range(self.maze_nrows)))
-        init_state = self._coord_to_s(self.origin)
-        terminal_states = [self._coord_to_s(coord) for coord in self.maze_objects.keys()]
-        p_data = config.get('transit_matrix', None)
-        r_data = config.get('reward_matrix', None)
+        actions_space = self._init_actions_space(self.maze_controllers)
+        states_space = self._init_states_space(self.maze_ncols, self.maze_nrows)
+        p_data = self._init_p_data(config.get('transit_matrix', None))
+        r_data = self._init_r_data(config.get('reward_matrix', None))
 
-        self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data, r_data, init_state=init_state, terminal_states=terminal_states)
+        self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data, r_data)
 
         # draw maze
         self.canvas = tk.Canvas(self, bg='white',
                                 width=self.maze_ncols * self.u_px,
                                 height=self.maze_nrows * self.u_px)
         self.canvas.pack()
+
         self.redraw_all(self.canvas)
         self.update()
+
+    def _init_controllers(self, maze_controllers):
+        list(maze_controllers.keys())
+
+    def _bind_keys(self, maze_controllers):
+        bindings = dict()
+        for action, keys in maze_controllers.items():
+            for key in keys:
+                bindings[key] = action
+        return bindings
+
+    def _init_actions_space(self, controllers):
+        return list(range(len(controllers)))
+
+    def _init_states_space(self, ncols, nrows):
+        return list(iter.product(range(ncols), range(nrows)))
+    
+    def _init_p_data(self, data):
+        return data
+    
+    def _init_r_data(self, data):
+        return data
     
     def reset(self):
         # reset observation
@@ -165,7 +209,6 @@ class Maze2DEnv(tk.Tk):
             (self.obs[0] + 1) * self.u_px - 2,
             (self.obs[1] + 1) * self.u_px - 2,
             fill='grey')
-
 
     def redraw_all(self, canvas):
         # clear all objects on the canvas
@@ -198,12 +241,7 @@ class Maze2DEnv(tk.Tk):
                 fill=color)
 
         # draw obs, grey square
-        self.obs_canvas = canvas.create_rectangle(
-            self.obs[0] * self.u_px + 2,
-            self.obs[1] * self.u_px + 2,
-            (self.obs[0] + 1) * self.u_px - 2,
-            (self.obs[1] + 1) * self.u_px - 2,
-            fill='grey')
+        self.redraw_obs(canvas)
 
     def render(self):
         time.sleep(self.win_refresh_interval)
@@ -220,13 +258,15 @@ class Maze2DEnv(tk.Tk):
         obs = [s%self.maze_ncols, s//self.maze_ncols]
         return tuple(obs)
     
-    def move_step(self, a):
-        s_, _, done = self.mdp.move_step(self._coord_to_s(self.obs), a)
+    def _key_to_a(self, key):
+        return self.maze_ncols * obs[1] + obs[0]
+    
+    def move_step(self, action):
+        s = self._coord_to_s(self.obs)
+        a = self.controllers
+        s_, _, done = self.mdp.move_step(s, a)
         self.obs = self._s_to_coord(s_)
         return self.obs, done
-
-    def bind_handler(event, handler, *args, **kwargs):
-        self.bind(event, handler, *args, **kwargs)
 
     def disable_manual_mode(self):
         self.manual_mode = False
@@ -239,22 +279,13 @@ class Maze2DEnv(tk.Tk):
         self.bind('<KeyPress>', self.keypress_handler)
 
     def keypress_handler(self, event):
-        a = None
-        if event.keysym in ['Left', 'a', 'A']:
-            a = 0
-        elif event.keysym in ['Right', 'd', 'D']:
-            a = 1
-        elif event.keysym in ['Up', 'w', 'W']:
-            a = 2
-        elif event.keysym in ['Down', 's', 'S']:
-            a = 3
-
-        if a != None:
+        action = self.key_bindings.get(event.keysym)
+        if action != None:
             if not self.action_buffer.full():
-                self.action_buffer.put_nowait(a)
-            else:
-                # ignore key pressed
-                pass
+                self.action_buffer.put_nowait(action)
+        else:
+            # ignore key pressed
+            pass
     
     def get_queue_action(self):
         if self.manual_mode:

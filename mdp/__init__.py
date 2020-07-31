@@ -2,7 +2,7 @@
 @author: xusheng
 '''
 
-__all__ = ['alg', 'env', 'policy', 'starter']
+__all__ = ['alg', 'agent', 'env', 'policy', 'starter']
 
 
 import numpy as np
@@ -18,7 +18,13 @@ default_maze_config = {
         (2, 1): 'mine',
         (3, 3): 'mine',
         (4, 1): 'mine',
-        (4, 3): 'treasure',  # treasure
+        (4, 3): 'exit',  # exit
+    },
+    'maze_controllers': {
+        'left': ['Left', 'a', 'A'],
+        'right': ['Right', 'd', 'D'],
+        'up': ['Up', 'w', 'W'],
+        'down': ['Down', 's', 'S']
     },
     'transit_matrix': [
         # s, a, s_, p
