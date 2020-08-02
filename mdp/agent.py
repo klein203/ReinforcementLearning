@@ -18,8 +18,8 @@ class InteractiveAgent(AbstractAgent):
         while True:
             self.env.render()
 
-            # fetch valid keypress from queue in env
-            action = self.env.get_queue_action()
+            # fetch valid keypress from queue
+            action = self.env.fetch_action()
             if action == None:
                 continue
             
@@ -32,7 +32,7 @@ class InteractiveAgent(AbstractAgent):
                 else:
                     disp_state = 'BUSTED'
                 logging.info('------------------%s----------------' % disp_state)
-                
+                self.env.set_message(disp_state)
                 self.env.render()
                 break
 
