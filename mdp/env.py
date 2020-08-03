@@ -78,7 +78,7 @@ class MarkovDecisionProcess(object):
             raise Exception('invalid r(%s|%s, %s)' % (s_, s, a))
         return filter_df['r'].values[0]
 
-    def get_actions_probs(self, s):
+    def get_actions_prob(self, s):
         """
         s:object -> df:pd.DataFrame(['a', 'p'])
         """
@@ -91,7 +91,7 @@ class MarkovDecisionProcess(object):
         (s:object, a:object) -> s_:int
         """
         df = self.p_df
-        filter_df = df[(df['s']==s) & (df['a']==a)][['s_', 'p']]
+        filter_df = df[(df['s']==s) & (df['a']==a)]#[['s_', 'p']]
         return np.random.choice(filter_df['s_'], p=filter_df['p'])
     
     def is_terminal(self, s):

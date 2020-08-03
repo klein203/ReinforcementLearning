@@ -1,4 +1,7 @@
 import logging
+import itertools as iter
+import numpy as np
+import pandas as pd
 
 
 class AbstractAgent(object):
@@ -44,3 +47,12 @@ class InteractiveAgent(AbstractAgent):
         self.env.enable_manual_mode()
         self.env.after(100, self._play)
         self.env.mainloop()
+
+
+class QLearningAgent(AbstractAgent):
+    def __init__(self, env, *args, **kwargs):
+        super(QLearningAgent, self).__init__(env, *args, **kwargs)
+        self.policy_df = pd.DataFrame(data=iter.product(), columns=['s', 'a', 'q'])
+    
+
+    
