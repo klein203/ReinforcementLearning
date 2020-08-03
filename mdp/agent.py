@@ -52,7 +52,7 @@ class InteractiveAgent(AbstractAgent):
 class QLearningAgent(AbstractAgent):
     def __init__(self, env, *args, **kwargs):
         super(QLearningAgent, self).__init__(env, *args, **kwargs)
-        self.policy_df = pd.DataFrame(data=iter.product(), columns=['s', 'a', 'q'])
+        self.q_df = pd.DataFrame(data=iter.product(), columns=['s', 'a', 's_', 'q'])
     
 
     

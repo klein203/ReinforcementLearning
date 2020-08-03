@@ -11,15 +11,13 @@ class MarkovDecisionProcess(object):
     """
     Markov Decision Process <S, A, P, R, γ>
     """
-    def __init__(self, states_space, actions_space, p_df, r_df, discount_factor=0.9):
+    def __init__(self, states_space, actions_space, p_data, discount_factor=0.9):
         """
-        p_df is a pd.DataFrame like structure with columns ['s', 'a', 's_', 'p']
-        r_df is a pd.DataFrame like structure with columns ['s', 'a', 's_', 'r']
+        p_df is a pd.DataFrame like structure with columns ['s', 'a', 's_', 'r', 'p']
         """
         self.states_space = states_space
         self.actions_space = actions_space
-        self.p_df = pd.DataFrame(data=p_df, columns=['s', 'a', 's_', 'p']).astype({'s': object, 'a': object, 's_': object, 'p': float})
-        self.r_df = pd.DataFrame(data=r_df, columns=['s', 'a', 's_', 'r']).astype({'s': object, 'a': object, 's_': object, 'r': float})
+        self.p_df = pd.DataFrame(data=p_data, columns=['s', 'a', 's_', 'r', 'p']).astype({'s': object, 'a': object, 's_': object, 'r': float, 'p': float})
         self.gamma = discount_factor
     
     @property
@@ -42,10 +40,10 @@ class MarkovDecisionProcess(object):
     def n_actions(self):
         return len(self.actions_space)
     
-    def p(self, s, a, s_):
+    def p(self, s, a, s_, r=None):
         """
-        transit probabilities matrix, p(s_ | s, a)
-        (s:object, a:object, s_:object) -> p:float
+        p(s_, r | s, a); p(s_ | s, a)
+        (s:object, a:object, s_:object, r:float) -> p:float
         """
         df = self.p_df
         filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
@@ -56,26 +54,35 @@ class MarkovDecisionProcess(object):
                 raise Exception('invalid a=%s' % a)
             if s_ not in self.states_space:
                 raise Exception('invalid s_=%s' % s_)
-
-            raise Exception('invalid p(%s|%s, %s)' % (s_, s, a))
-        return filter_df['p'].values[0]
+            raise Exception('invalid p(%s %s|%s, %s)' % (s_, r, s, a))
+        if r != None:
+            filter_df = filter_df(filter_df['r']==r)
+        
+        return filter_df['p'].sum()
     
-    def r(self, s, a, s_):
+    def r(self, s, a, s_=None):
         """
-        reward table, r(s_ | s, a)
+        r(s, a, s_); r(s, a)
         (s:object, a:object, s_:object) -> r:float
         """
-        df = self.r_df
-        filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
-        if filter_df.empty:
-            if s not in self.states_space:
-                raise Exception('invalid s=%s' % s)
-            if a not in self.actions_space:
-                raise Exception('invalid a=%s' % a)
-            if s_ not in self.states_space:
-                raise Exception('invalid s_=%s' % s_)
+        df = self.p_df
+        filter_df = df[(df['s']==s) & (df['a']==a)]
+        # if filter_df.empty:
+        #     if s not in self.states_space:
+        #         raise Exception('invalid s=%s' % s)
+        #     if a not in self.actions_space:
+        #         raise Exception('invalid a=%s' % a)
+        #     if s_ != None:
+        #         if s_ not in self.states_space:
+        #             raise Exception('invalid s_=%s' % s_)
 
-            raise Exception('invalid r(%s|%s, %s)' % (s_, s, a))
+        #     raise Exception('invalid r(%s, %s, %s)' % (s, a, s_))
+        # if s_ != None:
+        #     filter_df = filter_df(filter_df['s_']==s_)
+        if s_ == None:
+            return (filter_df['r'] * filter_df['p']).sum()
+        filter_df[['s_', 'r']]
+        self.p(s, a, s_, r)
         return filter_df['r'].values[0]
 
     def get_actions_prob(self, s):
@@ -154,10 +161,9 @@ class Maze2DEnv(tk.Tk):
         # init MDP
         actions_space = self._init_actions_space(key_bindings)
         states_space = self._init_states_space(self.maze_ncols, self.maze_nrows)
-        p_data = self._init_p_data(config.get('transit_matrix', None))
-        r_data = self._init_r_data(config.get('reward_matrix', None))
+        p_data = self._init_p_data(config.get('p_matrix', None))
 
-        self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data, r_data)
+        self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data)
 
         # draw maze
         self.canvas = tk.Canvas(self, bg='white',
