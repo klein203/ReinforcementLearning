@@ -17,8 +17,11 @@ class MarkovDecisionProcess(object):
         """
         self.states_space = states_space
         self.actions_space = actions_space
-        self.p_df = pd.DataFrame(data=p_data, columns=['s', 'a', 's_', 'r', 'p']).astype({'s': object, 'a': object, 's_': object, 'r': float, 'p': float})
-        self.gamma = discount_factor
+        self.p_df = pd.DataFrame(
+            data=p_data, 
+            columns=['s', 'a', 's_', 'r', 'p'])\
+                .astype({'s': object, 'a': object, 's_': object, 'r': float, 'p': float})
+        # self.gamma = discount_factor
     
     @property
     def states(self):
@@ -42,11 +45,16 @@ class MarkovDecisionProcess(object):
     
     def p(self, s, a, s_, r=None):
         """
-        p(s_, r | s, a); p(s_ | s, a)
+        p(s_, r|s, a)
+        p(s_|s, a) = Σ[p(s_, r|s, a)]
         (s:object, a:object, s_:object, r:float) -> p:float
         """
         df = self.p_df
-        filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
+        if r == None:
+            filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
+        else:
+            filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_) & (df['r']==r)]
+        
         if filter_df.empty:
             if s not in self.states_space:
                 raise Exception('invalid s=%s' % s)
@@ -55,47 +63,48 @@ class MarkovDecisionProcess(object):
             if s_ not in self.states_space:
                 raise Exception('invalid s_=%s' % s_)
             raise Exception('invalid p(%s %s|%s, %s)' % (s_, r, s, a))
-        if r != None:
-            filter_df = filter_df(filter_df['r']==r)
         
         return filter_df['p'].sum()
     
     def r(self, s, a, s_=None):
         """
-        r(s, a, s_); r(s, a)
+        r(s, a, s_) = Σ[r * p(s_, r|s, a)] / p(s_|s, a)
+        r(s, a) = Σ[r * Σ[p(s_, r|s, a)]]]
         (s:object, a:object, s_:object) -> r:float
         """
         df = self.p_df
-        filter_df = df[(df['s']==s) & (df['a']==a)]
-        # if filter_df.empty:
-        #     if s not in self.states_space:
-        #         raise Exception('invalid s=%s' % s)
-        #     if a not in self.actions_space:
-        #         raise Exception('invalid a=%s' % a)
-        #     if s_ != None:
-        #         if s_ not in self.states_space:
-        #             raise Exception('invalid s_=%s' % s_)
+        if s_ == None:
+            filter_df = df[(df['s']==s) & (df['a']==a)]
+        else:
+            filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
 
-        #     raise Exception('invalid r(%s, %s, %s)' % (s, a, s_))
-        # if s_ != None:
-        #     filter_df = filter_df(filter_df['s_']==s_)
+        if filter_df.empty:
+            if s not in self.states_space:
+                raise Exception('invalid s=%s' % s)
+            if a not in self.actions_space:
+                raise Exception('invalid a=%s' % a)
+            if s_ != None:
+                if s_ not in self.states_space:
+                    raise Exception('invalid s_=%s' % s_)
+            raise Exception('invalid r(%s, %s, %s)' % (s, a, s_))
+
         if s_ == None:
             return (filter_df['r'] * filter_df['p']).sum()
-        filter_df[['s_', 'r']]
-        self.p(s, a, s_, r)
-        return filter_df['r'].values[0]
+        else:
+            return (filter_df['r'] * filter_df['p']).sum() / self.p(s, a, s_)
 
-    def get_actions_prob(self, s):
+    def get_actions(self, s):
         """
-        s:object -> df:pd.DataFrame(['a', 'p'])
+        get all available actions from s
+        s:object -> a:list<object>
         """
         df = self.p_df
         filter_df = df[(df['s']==s)]
-        return filter_df[['a', 'p']] 
+        return filter_df['a'].unique().tolist()
     
     def get_next_state(self, s, a):
         """
-        (s:object, a:object) -> s_:int
+        (s:object, a:object) -> s_:object
         """
         df = self.p_df
         filter_df = df[(df['s']==s) & (df['a']==a)]#[['s_', 'p']]
@@ -117,7 +126,7 @@ class MarkovDecisionProcess(object):
     
     def move_step(self, s, a):
         s_ = self.get_next_state(s, a)
-        r = self.r(s, a, s_)
+        r = self.r(s, a)
         done = self.is_terminal(s_)
         
         return s_, r, done
@@ -153,17 +162,18 @@ class Maze2DEnv(tk.Tk):
 
         self.manual_mode = False
         self.msg = None
+        self.msg_canvas = None
 
         # observation, default (0, 0) (from the very left/top position)
         self.obs = self.origin
         self.obs_canvas = None
 
         # init MDP
-        actions_space = self._init_actions_space(key_bindings)
-        states_space = self._init_states_space(self.maze_ncols, self.maze_nrows)
+        self.actions_space = self._init_actions_space(key_bindings)
+        self.states_space = self._init_states_space(self.maze_ncols, self.maze_nrows)
         p_data = self._init_p_data(config.get('p_matrix', None))
 
-        self.mdp = MarkovDecisionProcess(states_space, actions_space, p_data)
+        self.mdp = MarkovDecisionProcess(self.states_space, self.actions_space, p_data)
 
         # draw maze
         self.canvas = tk.Canvas(self, bg='white',
@@ -199,7 +209,8 @@ class Maze2DEnv(tk.Tk):
     def reset(self):
         # reset observation
         self.obs = self.origin
-        self.render()
+        # reset message
+        self.msg = None
         return self.obs
     
     def redraw_partial(self, canvas):
@@ -213,14 +224,23 @@ class Maze2DEnv(tk.Tk):
             (self.obs[1] + 1) * self.u_px - 2,
             fill='grey')
         
-        if self.msg != None:
-            self.draw_message(canvas)
+        if self.msg == None:
+            if self.msg_canvas != None:
+                canvas.delete(self.msg_canvas)
+        else:
+            self.msg_canvas = canvas.create_text(
+                self.win_w_px//2, self.win_h_px//2,
+                text=self.msg,
+                font=('Arial', 30, 'bold'),
+                fill='red')
     
-    def set_message(self, msg):
-        self.msg = msg
-
-    def draw_message(self, canvas):
-        canvas.create_text(self.win_w_px//2, self.win_h_px//2, text=self.msg, font=('Arial', 30, 'bold'), fill='red')
+    def update_message(self, obs):
+        obj = self.get_object(obs)
+        if obj == 'exit':
+            self.msg = 'WIN'
+        else:
+            self.msg = 'BUSTED'
+        return self.msg
 
     def draw_all(self, canvas):
         # draw grids
@@ -261,9 +281,15 @@ class Maze2DEnv(tk.Tk):
         return self.maze_objects.get(obs)
 
     def move_step(self, a):
-        self.obs, _, done = self.mdp.move_step(self.obs, a)
-        return self.obs, done
+        self.obs, r, done = self.mdp.move_step(self.obs, a)
+        return self.obs, r, done
+    
+    def is_terminal(self, obs):
+        return self.mdp.is_terminal(obs)
 
+    def get_actions(self, obs):
+        return self.mdp.get_actions(obs)
+    
     def disable_manual_mode(self):
         self.manual_mode = False
         self.action_buffer = None

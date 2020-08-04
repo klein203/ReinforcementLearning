@@ -26,18 +26,20 @@ class RandomPolicy(AbstractPolicy):
 
 
 class EpsilonGreedyPolicy(AbstractPolicy):
-    def __init__(self, states_space, actions_space, epsilon=0.1, *args, **kwargs):
-        super(EpsilonGreedyPolicy, self).__init__(states_space, actions_space, *args, **kwargs)
+    def __init__(self, epsilon=0.1, *args, **kwargs):
+        super(EpsilonGreedyPolicy, self).__init__(*args, **kwargs)
         self.epsilon = epsilon
         self.name = 'EpsilonGreedyPolicy(e=%.4f)' % self.epsilon
 
-    def choose(self, actions_q):
-        if np.random.rand() >= self.epsilon:
-            actual = np.argmax(val_actions)
-        else:
-            actual = np.random.choice(len(val_actions))
+    def choose(self, qvals):
+        pass
+        # if np.random.rand() >= self.epsilon:
+        #     qvals[]
+        #     actual = np.argmax(val_actions)
+        # else:
+        #     actual = np.random.choice(len(val_actions))
         
-        return actual, val_actions
+        # return actual, val_actions
     
     # def _check_available(self, s):
     #     df = self.q_df
