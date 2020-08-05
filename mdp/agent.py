@@ -71,7 +71,7 @@ class QTableBasedAgent(AIAgent):
         super(QTableBasedAgent, self).__init__(env, *args, **kwargs)
         self.silent_mode = False
         self.q_def_val = 0
-        self.q_df = pd.DataFrame(
+        self.table_df = pd.DataFrame(
             data=iter.product(self.env.states_space, self.env.actions_space, [self.q_def_val]), 
             columns=['s', 'a', 'q']).astype({'s': object, 'a': object, 'q': float})
         self.discount_factor = 0.9 # gamma -> 1, farseer
@@ -80,7 +80,7 @@ class QTableBasedAgent(AIAgent):
         self.learning_rate = 0.1
 
     def choose_action(self, s):
-        df = self.q_df
+        df = self.table_df
         if np.random.rand() >= self.epsilon:
             actions = self.env.get_actions(s)
             if df[(df['s']==s) & (df['a'].isin(actions))]['q'].max() == self.q_def_val:
@@ -145,22 +145,22 @@ class QTableBasedAgent(AIAgent):
         """
         only for easy checking (column original format lost), save well-trained params to file in csv format
         """
-        self.q_df.to_csv(filename)
-        logging.debug('save params to file %s:\n%s' % (filename, self.q_df))
+        self.table_df.to_csv(filename)
+        logging.debug('save params to file %s:\n%s' % (filename, self.table_df))
 
     def save_pickle(self, filename):
         """
         save well-trained params to file in pickle format
         """
-        self.q_df.to_pickle(filename)
-        logging.debug('save params to file %s:\n%s' % (filename, self.q_df))
+        self.table_df.to_pickle(filename)
+        logging.debug('save params to file %s:\n%s' % (filename, self.table_df))
 
     def load_pickle(self, filename):
         """
         load params from file in pickle format
         """
-        self.q_df = pd.read_pickle(filename)
-        logging.debug('load params from file %s:\n%s' % (filename, self.q_df))
+        self.table_df = pd.read_pickle(filename)
+        logging.debug('load params from file %s:\n%s' % (filename, self.table_df))
 
 
 class QLearningAgent(QTableBasedAgent):
@@ -168,7 +168,7 @@ class QLearningAgent(QTableBasedAgent):
         super(QLearningAgent, self).__init__(env, *args, **kwargs)
     
     def learn(self, s, a, r, s_):
-        df = self.q_df
+        df = self.table_df
         if self.env.is_terminal(s_):
             q_target = r
         else:
@@ -217,8 +217,11 @@ class SarsaAgent(QTableBasedAgent):
     def __init__(self, env, *args, **kwargs):
         super(SarsaAgent, self).__init__(env, *args, **kwargs)
 
+    def _reset_episode(self):
+        pass
+
     def learn(self, s, a, r, s_, a_):
-        df = self.q_df
+        df = self.table_df
         if self.env.is_terminal(s_):
             q_target = r
         else:
@@ -229,12 +232,17 @@ class SarsaAgent(QTableBasedAgent):
         q_predict = df.loc[idx, 'q']
         df.loc[idx, 'q'] = q_predict + self.learning_rate * (q_target - q_predict)
 
+    def _reset_episode(self):
+        pass
+
     def _train(self, n_episode, n_step=1000, save_fname=None, load_fname=None):
         if load_fname != None:
             self.load_pickle('.'.join([load_fname, 'pickle']))
 
         for i_episode in range(n_episode):
+            self._reset_episode()
             i_step = 0
+
             obs = self.env.reset()
             a = self.choose_action(obs)
             while True:
@@ -263,3 +271,44 @@ class SarsaAgent(QTableBasedAgent):
         if save_fname != None:
             self.save_pickle('.'.join([save_fname, 'pickle']))
             self.save_csv('.'.join([save_fname, 'csv']))
+
+
+class SarsaLambdaAgent(SarsaAgent):
+    def __init__(self, env, lambda_decay=0.9, *args, **kwargs):
+        super(SarsaAgent, self).__init__(env, *args, **kwargs)
+        # add eligibility columns, default 0
+        self.elig_def_val = 0
+        self.table_df.insert(self.table_df.shape[1], 'elig', self.elig_def_val)
+
+        self.lambda_decay = lambda_decay
+
+    def learn(self, s, a, r, s_, a_):
+        df = self.table_df
+        # δ = R(s, a) + γ * Q(s', a') - Q(s, a)
+        delta = r + self.discount_factor * df[(df['s']==s_) & (df['a']==a_)]['q'].sum()\
+            - df[(df['s']==s) & (df['a']==a)]['q'].sum()
+        
+        self._update_elig(s, a)
+        
+        # for all s, a: Q(s, a) = Q(s, a) + α * δ * E(s, a)
+        df['q'] = df['q'] + self.learning_rate * delta * df['elig']
+        # E(s, a) = γ * λ * E(s, a)
+        df['elig'] = self.discount_factor * self.lambda_decay * df['elig']
+
+    def _update_elig(self, s, a):
+        df = self.table_df
+        # accumulating trace
+        # E(s, a) = E(s, a) + 1
+        idx = df[(df['s']==s) & (df['a']==a)].index
+        df.loc[idx, 'elig'] += 1
+
+        # replacing trace
+        # E(s, :) = 0, E(s, a) = 1
+        # df[(df['s']==s)]['elig'] = 0
+        # df[(df['s']==s) & (df['a']==a)]['elig'] = 1
+
+    def _reset_lambda_decay(self):
+        self.table_df.loc[:, 'elig'] = self.elig_def_val
+
+    def _reset_episode(self):
+        self._reset_lambda_decay()

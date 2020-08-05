@@ -6,7 +6,7 @@ import numpy as np
 # import seaborn as sns
 import mdp
 from mdp.env import Maze2DEnv, MarkovDecisionProcess as MDP
-from mdp.agent import InteractiveAgent, QLearningAgent, SarsaAgent
+from mdp.agent import InteractiveAgent, QLearningAgent, SarsaAgent, SarsaLambdaAgent
 
 
 def interactive_agent_run():
@@ -79,3 +79,18 @@ def ch3_sarsa(mode='train', n_episode=200, filename='sarsa', load_file=False, si
         agent.play(load_fname=filename)
     else:
         raise Exception('invalid mode')
+
+def ch3_sarsa_lambda(mode='train', n_episode=200, filename='sarsa_lambda', load_file=False, silent_mode=False):
+    env = Maze2DEnv(config=mdp.default_maze_config)
+    agent = SarsaLambdaAgent(env)
+    agent.silent_mode = silent_mode
+    if mode == 'train':
+        if load_file:
+            agent.train(n_episode, save_fname=filename, load_fname=filename)
+        else:
+            agent.train(n_episode, save_fname=filename)
+    elif mode == 'play':
+        agent.play(load_fname=filename)
+    else:
+        raise Exception('invalid mode')
+

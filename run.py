@@ -21,6 +21,10 @@ def ch3_case():
     # ch3.ch3_sarsa(mode='train', n_episode=200, filename=filename, load_file=True, silent_mode=True)
     # ch3.ch3_sarsa(mode='play', filename=filename)
 
+    filename = 'sarsa_lambda_20200805_0'
+    ch3.ch3_sarsa_lambda(mode='train', n_episode=200, filename=filename, load_file=False, silent_mode=True)
+    # ch3.ch3_sarsa_lambda(mode='play', filename=filename)
+
 
 if __name__ == "__main__":
     # log to console
