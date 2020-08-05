@@ -81,14 +81,14 @@ class QLearningAgent(AbstractAgent):
         if self.env.is_terminal(s_):
             q_target = r
         else:
-            q_target = r + self.discount_factor * df[(df['s']==s)]['q'].max()
+            # Q = R(s, a) + γ * maxQ(s', a')
+            q_target = r + self.discount_factor * df[(df['s']==s_)]['q'].max()
         
         idx = df[(df['s']==s) & (df['a']==a)].index
         q_predict = df.loc[idx, 'q']
         df.loc[idx, 'q'] = q_predict + self.learning_rate * (q_target - q_predict)
 
     def _play(self, load_fname):
-        self.silent_mode = False
         self.epsilon = 0.0 # maxQ, no random
         self.load_pickle('.'.join([load_fname, 'pickle']))
         
@@ -110,6 +110,7 @@ class QLearningAgent(AbstractAgent):
             obs = obs_
 
     def play(self, load_fname):
+        self.silent_mode = False
         self.env.after(100, self._play, load_fname)
         self.env.mainloop()
     
@@ -128,6 +129,7 @@ class QLearningAgent(AbstractAgent):
                 i_step += 1
                 a = self.choose_action(obs)
                 obs_, r, done = self.env.move_step(a)
+
                 self.learn(obs, a, r, obs_)
                 
                 if done:
@@ -139,6 +141,8 @@ class QLearningAgent(AbstractAgent):
                     break
 
                 obs = obs_
+        
+        self.env.destroy()
         
         if save_fname != None:
             self.save_pickle('.'.join([save_fname, 'pickle']))

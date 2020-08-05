@@ -124,6 +124,11 @@ class MarkovDecisionProcess(object):
         else:
             return False
     
+    def terminal_check(self):
+        df = self.p_df
+        filter_df = df['s'].unique()
+        return list(set(self.states_space) ^ set(df['s']))
+    
     def move_step(self, s, a):
         s_ = self.get_next_state(s, a)
         r = self.r(s, a)
@@ -152,6 +157,7 @@ class Maze2DEnv(tk.Tk):
 
         # entry, miners, exit in maze
         self.maze_objects = config.get('maze_objects', {(self.maze_ncols-1, self.maze_nrows-1): 'exit'})
+
         key_bindings = config.get('key_bindings', None)
         self.key_bindings = self._init_key_bindings(key_bindings)
         self.origin = config.get('origin', (0, 0))
