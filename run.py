@@ -13,9 +13,13 @@ def ch3_case():
     # ch3.interactive_agent_run()
     # ch3.ch3_6(100)
 
-    filename = 'q_learning_20200805_0'
-    ch3.ch3_qlearning(mode='train', n_episode=100, filename=filename, load_file=True, silent_mode=True)
+    # filename = 'q_learning_20200805_0'
+    # ch3.ch3_qlearning(mode='train', n_episode=100, filename=filename, load_file=True, silent_mode=True)
     # ch3.ch3_qlearning(mode='play', filename=filename)
+    
+    # filename = 'sarsa_20200805_0'
+    # ch3.ch3_sarsa(mode='train', n_episode=200, filename=filename, load_file=True, silent_mode=True)
+    # ch3.ch3_sarsa(mode='play', filename=filename)
 
 
 if __name__ == "__main__":
