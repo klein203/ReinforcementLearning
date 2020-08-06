@@ -67,17 +67,18 @@ class AIAgent(AbstractAgent):
 
 
 class QTableBasedAgent(AIAgent):
-    def __init__(self, env, *args, **kwargs):
+    def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, *args, **kwargs):
         super(QTableBasedAgent, self).__init__(env, *args, **kwargs)
         self.silent_mode = False
         self.q_def_val = 0
         self.table_df = pd.DataFrame(
             data=iter.product(self.env.states_space, self.env.actions_space, [self.q_def_val]), 
             columns=['s', 'a', 'q']).astype({'s': object, 'a': object, 'q': float})
-        self.discount_factor = 0.9 # gamma -> 1, farseer
+        self.gamma = gamma # gamma -> 1, farseer; discount factor
 
-        self.epsilon = 0.1 # e-greedy
-        self.learning_rate = 0.1
+        self.epsilon_ori = epsilon
+        self.epsilon = self.epsilon_ori # e-greedy
+        self.alpha = lr # alpha, learning rate
 
     def choose_action(self, s):
         df = self.table_df
@@ -125,6 +126,8 @@ class QTableBasedAgent(AIAgent):
                 break
 
             obs = obs_
+        
+        self.epsilon = self.epsilon_ori
 
     def play(self, load_fname):
         self.silent_mode = False
@@ -164,8 +167,8 @@ class QTableBasedAgent(AIAgent):
 
 
 class QLearningAgent(QTableBasedAgent):
-    def __init__(self, env, *args, **kwargs):
-        super(QLearningAgent, self).__init__(env, *args, **kwargs)
+    def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, *args, **kwargs):
+        super(QLearningAgent, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
     
     def learn(self, s, a, r, s_):
         df = self.table_df
@@ -173,11 +176,11 @@ class QLearningAgent(QTableBasedAgent):
             q_target = r
         else:
             # Q = R(s, a) + γ * maxQ(s', a')
-            q_target = r + self.discount_factor * df[(df['s']==s_)]['q'].max()
+            q_target = r + self.gamma * df[(df['s']==s_)]['q'].max()
         
         idx = df[(df['s']==s) & (df['a']==a)].index
         q_predict = df.loc[idx, 'q']
-        df.loc[idx, 'q'] = q_predict + self.learning_rate * (q_target - q_predict)
+        df.loc[idx, 'q'] = q_predict + self.alpha * (q_target - q_predict)
     
     def _train(self, n_episode, n_step=1000, save_fname=None, load_fname=None):
         if load_fname != None:
@@ -214,23 +217,18 @@ class QLearningAgent(QTableBasedAgent):
 
 
 class SarsaAgent(QTableBasedAgent):
-    def __init__(self, env, *args, **kwargs):
-        super(SarsaAgent, self).__init__(env, *args, **kwargs)
-
-    def _reset_episode(self):
-        pass
+    def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, *args, **kwargs):
+        super(SarsaAgent, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
 
     def learn(self, s, a, r, s_, a_):
         df = self.table_df
-        if self.env.is_terminal(s_):
-            q_target = r
-        else:
-            # Q = R(s, a) + γ * Q(s', a')
-            q_target = r + self.discount_factor * df[(df['s']==s_) & (df['a']==a_)]['q'].sum()
+
+        # Q = R(s, a) + γ * Q(s', a')
+        q_target = r + self.gamma * df[(df['s']==s_) & (df['a']==a_)]['q'].sum()
         
         idx = df[(df['s']==s) & (df['a']==a)].index
         q_predict = df.loc[idx, 'q']
-        df.loc[idx, 'q'] = q_predict + self.learning_rate * (q_target - q_predict)
+        df.loc[idx, 'q'] = q_predict + self.alpha * (q_target - q_predict)
 
     def _reset_episode(self):
         pass
@@ -274,41 +272,45 @@ class SarsaAgent(QTableBasedAgent):
 
 
 class SarsaLambdaAgent(SarsaAgent):
-    def __init__(self, env, lambda_decay=0.9, *args, **kwargs):
-        super(SarsaAgent, self).__init__(env, *args, **kwargs)
+    def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, lamda=0.9, *args, **kwargs):
+        super(SarsaAgent, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
         # add eligibility columns, default 0
         self.elig_def_val = 0
         self.table_df.insert(self.table_df.shape[1], 'elig', self.elig_def_val)
 
-        self.lambda_decay = lambda_decay
+        # if lambda = 0, Sarsa(λ) -> Sarsa
+        self.lamda = lamda
 
     def learn(self, s, a, r, s_, a_):
         df = self.table_df
         # δ = R(s, a) + γ * Q(s', a') - Q(s, a)
-        delta = r + self.discount_factor * df[(df['s']==s_) & (df['a']==a_)]['q'].sum()\
+        # q_target - q_predict
+        delta = r + self.gamma * df[(df['s']==s_) & (df['a']==a_)]['q'].sum()\
             - df[(df['s']==s) & (df['a']==a)]['q'].sum()
         
         self._update_elig(s, a)
         
         # for all s, a: Q(s, a) = Q(s, a) + α * δ * E(s, a)
-        df['q'] = df['q'] + self.learning_rate * delta * df['elig']
+        df['q'] = df['q'] + self.alpha * delta * df['elig']
         # E(s, a) = γ * λ * E(s, a)
-        df['elig'] = self.discount_factor * self.lambda_decay * df['elig']
+        df['elig'] = self.gamma * self.lamda * df['elig']
 
     def _update_elig(self, s, a):
         df = self.table_df
         # accumulating trace
         # E(s, a) = E(s, a) + 1
-        idx = df[(df['s']==s) & (df['a']==a)].index
-        df.loc[idx, 'elig'] += 1
+        # idx = df[(df['s']==s) & (df['a']==a)].index
+        # df.loc[idx, 'elig'] += 1
 
         # replacing trace
         # E(s, :) = 0, E(s, a) = 1
-        # df[(df['s']==s)]['elig'] = 0
-        # df[(df['s']==s) & (df['a']==a)]['elig'] = 1
+        idx = df[(df['s']==s)].index
+        df.loc[idx, 'elig'] = 0
+        idx = df[(df['s']==s) & (df['a']==a)].index
+        df.loc[idx, 'elig'] = 1
 
-    def _reset_lambda_decay(self):
+    def _reset_lamda(self):
         self.table_df.loc[:, 'elig'] = self.elig_def_val
 
     def _reset_episode(self):
-        self._reset_lambda_decay()
+        self._reset_lamda()

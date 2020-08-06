@@ -29,3 +29,4 @@ seaborn 0.10.1
 - Value
     - q-learning
     - sarsa
+    - sarsa(lambda)
