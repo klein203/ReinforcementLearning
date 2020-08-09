@@ -192,7 +192,28 @@ class Maze2DEnv(tk.Tk):
     
     def _init_r_data(self, data):
         return data
+
+    @property
+    def n_states(self):
+        return len(self.mdp.states_space)
+
+    @property
+    def n_actions(self):
+        return len(self.mdp.actions_space)
+
+    @property
+    def n_rewards(self):
+        return len(self.mdp.rewards_space)
     
+    def s(self, s):
+        return self.mdp.states_dict.get(s, None)
+    
+    def a(self, a):
+        return self.mdp.actions_dict.get(a, None)
+    
+    def r(self, r):
+        return self.mdp.rewards_dict.get(r, None)
+
     def reset(self):
         # reset observation
         self.obs = self.origin
