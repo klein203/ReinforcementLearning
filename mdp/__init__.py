@@ -32,6 +32,12 @@ default_maze_config = {
         'up': ['Up', 'w', 'W'],
         'down': ['Down', 's', 'S']
     },
+    'rewards_space': [
+        0, # normal move
+        -1, # miner
+        -0.1, # border
+        1, # exit
+    ],
     'p_matrix': [
         # s, a, s_, r, p
         [(0, 0), 'right', (1, 0), 0, 1],
