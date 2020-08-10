@@ -234,7 +234,7 @@ class SarsaAgent(QTableBasedAgent):
 
         self.q_table[self.env.s(s), self.env.a(a)] = q_predict + self.alpha * (q_target - q_predict)
 
-    def _reset_episode(self):
+    def _reset_episode_params(self):
         pass
 
     def _train(self, n_episode, n_step=1000, path='.', save_fname=None, load_fname=None):
@@ -242,7 +242,7 @@ class SarsaAgent(QTableBasedAgent):
             self.load_pickle(path, '.'.join([load_fname, 'pickle']))
 
         for i_episode in range(n_episode):
-            self._reset_episode()
+            self._reset_episode_params()
             i_step = 0
 
             obs = self.env.reset()
@@ -311,5 +311,5 @@ class SarsaLambdaAgent(SarsaAgent):
     def _reset_lamda(self):
         self.elig_table[:, :] = self.elig_def_val
 
-    def _reset_episode(self):
+    def _reset_episode_params(self):
         self._reset_lamda()

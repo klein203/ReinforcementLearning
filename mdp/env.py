@@ -18,10 +18,10 @@ class MarkovEnv(object):
         self.actions_dict = {a: i for i, a in enumerate(actions_space)}
         self.rewards_space = rewards_space
         self.rewards_dict = {r: i for i, r in enumerate(rewards_space)}
-        if probs_matrix == None:
-            self.probs_matrix = np.zeros((self.n_states, self.n_actions, self.n_states, self.n_rewards))
-        else:
-            self.probs_matrix = probs_matrix
+        self.probs_matrix = np.zeros((self.n_states, self.n_actions, self.n_states, self.n_rewards))
+        if probs_matrix != None:
+            for item in probs_matrix:
+                self.set_prob(item[0], item[1], item[2], item[3], item[4])
     
     @property
     def n_states(self):

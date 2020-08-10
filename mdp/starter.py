@@ -1,4 +1,4 @@
-# import logging
+import logging
 import os
 import numpy as np
 # import pandas as pd
@@ -18,36 +18,27 @@ def interactive_agent_run():
     player = InteractiveAgent(env)
     player.play()
 
-def ch3_6(n_step=20):
+def ch3_6_autocleaner(n_step=20):
     """
     chapter 3.6 (page xxx)
     a typical MDP process demo
     """
-    alpha = 0.8
-    beta = 0.7
-    r_research = 1.5
-    r_wait = 1.0
-
-    states_space = ['high', 'low']
-    actions_space = ['search', 'wait', 'recharge']
-    rewards_space = [-3, 0, r_wait, r_research]
-
-    p_matrix = np.zeros((len(states_space), len(actions_space), len(states_space), len(rewards_space)))
-    env = MarkovEnv(states_space, actions_space, rewards_space, p_matrix)
-    env.set_prob('high', 'search', 'high', r_research, alpha)
-    env.set_prob('high', 'search', 'low', r_research, 1-alpha)
-    env.set_prob('low', 'search', 'high', -3, 1-beta)
-    env.set_prob('low', 'search', 'low', r_research, beta)
-    env.set_prob('high', 'wait', 'high', r_wait, 1)
-    env.set_prob('low', 'wait', 'low', r_wait, 1)
-    env.set_prob('low', 'recharge', 'high', 0, 1)
+    cfg = mdp.autocleaner_mdp_config
+    env = MarkovEnv(cfg.get('states_space'),
+        cfg.get('actions_space'),
+        cfg.get('rewards_space'),
+        cfg.get('p_matrix'))
 
     s = 'high'
-    for i_step in range(n_step):
-        actions = env.get_actions(s)
-        a = np.random.choice(actions)
+    logging.info('init s = %s' % str(s))
+    for i_step in range(50):
+        a = np.random.choice(env.get_actions(s))
         s_ = env.get_s_(s, a)
-        print('#%d: Battery[%s], Action[%s] -> Battery[%s]' % (i_step+1, s, a, s_))
+
+        logging.info('#%d: Battery[%s], Action[%s] -> Battery[%s]' % (i_step+1, s, a, s_))
+        if env.is_terminal(s_):
+            logging.info('end')
+            break
         s = s_
 
 def ch3_qlearning(mode='train', n_episode=200, path='.', filename='q_learning', load_file=False, silent_mode=False):
