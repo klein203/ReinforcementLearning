@@ -1,6 +1,7 @@
 import logging
 import time
 
+import os
 
 def ch2_case():
     import bandit.starter as ch2
@@ -17,17 +18,19 @@ def ch3_case():
     # ch3.interactive_agent_run()
     # ch3.ch3_6(100)
 
-    # filename = 'q_learning_202008%s_0' % today
-    # ch3.ch3_qlearning(mode='train', n_episode=100, filename=filename, load_file=True, silent_mode=True)
-    # ch3.ch3_qlearning(mode='play', filename=filename)
+    weights_path = os.path.join(os.path.realpath('.'), 'mdp', 'temp')
     
-    # filename = 'sarsa_202008%s_0' % today
-    # ch3.ch3_sarsa(mode='train', n_episode=200, filename=filename, load_file=True, silent_mode=True)
-    # ch3.ch3_sarsa(mode='play', filename=filename)
+    filename = 'q_learning_%s_0' % today
+    ch3.ch3_qlearning(mode='train', n_episode=100, path=weights_path, filename=filename, load_file=False, silent_mode=True)
+    # ch3.ch3_qlearning(mode='play', path=weights_path, filename=filename)
+    
+    filename = 'sarsa_%s_0' % today
+    # ch3.ch3_sarsa(mode='train', n_episode=200, path=weights_path, filename=filename, load_file=True, silent_mode=True)
+    # ch3.ch3_sarsa(mode='play', path=weights_path, filename=filename)
 
     filename = 'sarsa_lambda_%s_0' % today
-    # ch3.ch3_sarsa_lambda(mode='train', n_episode=200, filename=filename, load_file=True, silent_mode=True)
-    ch3.ch3_sarsa_lambda(mode='play', filename=filename)
+    # ch3.ch3_sarsa_lambda(mode='train', n_episode=200, path=weights_path, filename=filename, load_file=False, silent_mode=True)
+    # ch3.ch3_sarsa_lambda(mode='play', path=weights_path, filename=filename)
 
 
 if __name__ == "__main__":

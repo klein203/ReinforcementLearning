@@ -7,34 +7,22 @@ import itertools as iter
 import queue
 
 
-class MarkovDecisionProcess(object):
+class MarkovEnv(object):
     """
     Markov Decision Process <S, A, P, R, γ>
     """
-    def __init__(self, states_space, actions_space, p_data, discount_factor=0.9):
-        """
-        p_df is a pd.DataFrame like structure with columns ['s', 'a', 's_', 'r', 'p']
-        """
+    def __init__(self, states_space, actions_space, rewards_space, probs_matrix=None):
         self.states_space = states_space
+        self.states_dict = {s: i for i, s in enumerate(states_space)}
         self.actions_space = actions_space
-        self.p_df = pd.DataFrame(
-            data=p_data, 
-            columns=['s', 'a', 's_', 'r', 'p'])\
-                .astype({'s': object, 'a': object, 's_': object, 'r': float, 'p': float})
-        # self.gamma = discount_factor
+        self.actions_dict = {a: i for i, a in enumerate(actions_space)}
+        self.rewards_space = rewards_space
+        self.rewards_dict = {r: i for i, r in enumerate(rewards_space)}
+        if probs_matrix == None:
+            self.probs_matrix = np.zeros((self.n_states, self.n_actions, self.n_states, self.n_rewards))
+        else:
+            self.probs_matrix = probs_matrix
     
-    @property
-    def states(self):
-        return self.states_space
-    
-    @property
-    def actions(self):
-        return self.actions_space
-
-    @property
-    def discount_factor(self):
-        return self.gamma
-
     @property
     def n_states(self):
         return len(self.states_space)
@@ -42,98 +30,86 @@ class MarkovDecisionProcess(object):
     @property
     def n_actions(self):
         return len(self.actions_space)
+
+    @property
+    def n_rewards(self):
+        return len(self.rewards_space)
     
-    def p(self, s, a, s_, r=None):
+    def s(self, s):
         """
-        p(s_, r|s, a)
+        state:object -> index:int
+        """
+        return self.states_dict.get(s, None)
+    
+    def a(self, a):
+        """
+        action:object -> index:int
+        """
+        return self.actions_dict.get(a, None)
+    
+    def r(self, r):
+        """
+        reward:object -> index:int
+        """
+        return self.rewards_dict.get(r, None)
+    
+    def set_prob(self, s, a, s_, r, p):
+        self.probs_matrix[self.s(s), self.a(a), self.s(s_), self.r(r)] = p
+    
+    def prob(self, s, a, s_, r=None):
+        """
         p(s_|s, a) = Σ[p(s_, r|s, a)]
-        (s:object, a:object, s_:object, r:float) -> p:float
+        p(s_, r|s, a)
+        (s:object, a:object, s_:object, r:object) -> p:float
         """
-        df = self.p_df
         if r == None:
-            filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
+            return self.probs_matrix[self.s(s), self.a(a), self.s(s_), :].sum()
         else:
-            filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_) & (df['r']==r)]
-        
-        if filter_df.empty:
-            if s not in self.states_space:
-                raise Exception('invalid s=%s' % s)
-            if a not in self.actions_space:
-                raise Exception('invalid a=%s' % a)
-            if s_ not in self.states_space:
-                raise Exception('invalid s_=%s' % s_)
-            raise Exception('invalid p(%s %s|%s, %s)' % (s_, r, s, a))
-        
-        return filter_df['p'].sum()
-    
-    def r(self, s, a, s_=None):
+            return self.probs_matrix[self.s(s), self.a(a), self.s(s_), self.r(r)]
+
+    def reward(self, s, a, s_=None):
         """
-        r(s, a, s_) = Σ[r * p(s_, r|s, a)] / p(s_|s, a)
         r(s, a) = Σ[r * Σ[p(s_, r|s, a)]]]
+        r(s, a, s_) = Σ[r * p(s_, r|s, a)] / p(s_|s, a)
         (s:object, a:object, s_:object) -> r:float
         """
-        df = self.p_df
         if s_ == None:
-            filter_df = df[(df['s']==s) & (df['a']==a)]
+            probs = self.probs_matrix[self.s(s), self.a(a), :, :]
+            rewards = np.array(self.rewards_space).reshape((-1, 1))
+            return np.matmul(probs, rewards).sum()
         else:
-            filter_df = df[(df['s']==s) & (df['a']==a) & (df['s_']==s_)]
-
-        if filter_df.empty:
-            if s not in self.states_space:
-                raise Exception('invalid s=%s' % s)
-            if a not in self.actions_space:
-                raise Exception('invalid a=%s' % a)
-            if s_ != None:
-                if s_ not in self.states_space:
-                    raise Exception('invalid s_=%s' % s_)
-            raise Exception('invalid r(%s, %s, %s)' % (s, a, s_))
-
-        if s_ == None:
-            return (filter_df['r'] * filter_df['p']).sum()
-        else:
-            return (filter_df['r'] * filter_df['p']).sum() / self.p(s, a, s_)
+            # todo
+            probs = self.probs_matrix[self.s(s), self.a(a), self.s(s_), :]
+            rewards = np.array(self.rewards_space).reshape((-1, 1))
+            return np.matmul(probs, rewards).sum() / probs.sum()
 
     def get_actions(self, s):
         """
         get all available actions from s
         s:object -> a:list<object>
         """
-        df = self.p_df
-        filter_df = df[(df['s']==s)]
-        return filter_df['a'].unique().tolist()
+        probs = self.probs_matrix[self.s(s), :, :, :].sum(axis=(1, 2))
+        return [a for p, a in zip(probs, self.actions_space) if p > 0]
     
-    def get_next_state(self, s, a):
+    def get_s_(self, s, a):
         """
         (s:object, a:object) -> s_:object
         """
-        df = self.p_df
-        filter_df = df[(df['s']==s) & (df['a']==a)]#[['s_', 'p']]
-        return np.random.choice(filter_df['s_'], p=filter_df['p'])
+        probs = self.probs_matrix[self.s(s), self.a(a), :, :].sum(axis=1)
+        s_ = np.random.choice(range(self.n_states), p=probs)
+        return self.states_space[s_]
     
     def is_terminal(self, s):
         """
         s:object -> b:bool
         """
-        if s not in self.states_space:
-            raise Exception('invalid s=%s' % s)
+        probs = self.probs_matrix[self.s(s), :, :, :].sum()
+        return probs == 0
 
-        df = self.p_df
-        filter_df = df[(df['s']==s)]
-        if filter_df.empty:
-            return True
-        else:
-            return False
-    
-    def terminal_check(self):
-        df = self.p_df
-        filter_df = df['s'].unique()
-        return list(set(self.states_space) ^ set(df['s']))
-    
     def move_step(self, s, a):
-        s_ = self.get_next_state(s, a)
-        r = self.r(s, a)
+        s_ = self.get_s_(s, a)
+        r = self.reward(s, a)
         done = self.is_terminal(s_)
-        
         return s_, r, done
 
 
@@ -177,9 +153,10 @@ class Maze2DEnv(tk.Tk):
         # init MDP
         self.actions_space = self._init_actions_space(key_bindings)
         self.states_space = self._init_states_space(self.maze_ncols, self.maze_nrows)
-        p_data = self._init_p_data(config.get('p_matrix', None))
+        self.rewards_space = self._init_rewards_space(config.get('rewards_space'))
 
-        self.mdp = MarkovDecisionProcess(self.states_space, self.actions_space, p_data)
+        self.mdp = MarkovEnv(self.states_space, self.actions_space, self.rewards_space)
+        self._init_p_data(config.get('p_matrix', None))
 
         # draw maze
         self.canvas = tk.Canvas(self, bg='white',
@@ -206,12 +183,37 @@ class Maze2DEnv(tk.Tk):
     def _init_states_space(self, ncols, nrows):
         return list(iter.product(range(ncols), range(nrows)))
     
+    def _init_rewards_space(self, rewards_space):
+        return rewards_space
+
     def _init_p_data(self, data):
-        return data
+        for d in data:
+            self.mdp.set_prob(d[0], d[1], d[2], d[3], d[4])
     
     def _init_r_data(self, data):
         return data
+
+    @property
+    def n_states(self):
+        return len(self.mdp.states_space)
+
+    @property
+    def n_actions(self):
+        return len(self.mdp.actions_space)
+
+    @property
+    def n_rewards(self):
+        return len(self.mdp.rewards_space)
     
+    def s(self, s):
+        return self.mdp.states_dict.get(s, None)
+    
+    def a(self, a):
+        return self.mdp.actions_dict.get(a, None)
+    
+    def r(self, r):
+        return self.mdp.rewards_dict.get(r, None)
+
     def reset(self):
         # reset observation
         self.obs = self.origin
