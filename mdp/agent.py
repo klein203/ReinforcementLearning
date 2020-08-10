@@ -73,9 +73,6 @@ class QTableBasedAgent(AIAgent):
         self.silent_mode = False
         self.q_def_val = 0
         self.q_table = np.zeros((self.env.n_states, self.env.n_actions))
-        self.table_df = pd.DataFrame(
-            data=iter.product(self.env.states_space, self.env.actions_space, [self.q_def_val]), 
-            columns=['s', 'a', 'q']).astype({'s': object, 'a': object, 'q': float})
         self.gamma = gamma # gamma -> 1, farseer; discount factor
 
         self.epsilon_ori = epsilon
@@ -280,44 +277,39 @@ class SarsaAgent(QTableBasedAgent):
 
 class SarsaLambdaAgent(SarsaAgent):
     def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, lamda=0.9, *args, **kwargs):
-        super(SarsaAgent, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
+        super(SarsaLambdaAgent, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
         # add eligibility columns, default 0
         self.elig_def_val = 0
-        self.table_df.insert(self.table_df.shape[1], 'elig', self.elig_def_val)
+        self.elig_table = np.zeros((self.env.n_states, self.env.n_actions))
 
         # if lambda = 0, Sarsa(λ) -> Sarsa
         self.lamda = lamda
 
     def learn(self, s, a, r, s_, a_):
-        df = self.table_df
         # δ = R(s, a) + γ * Q(s', a') - Q(s, a)
         # q_target - q_predict
-        delta = r + self.gamma * df[(df['s']==s_) & (df['a']==a_)]['q'].sum()\
-            - df[(df['s']==s) & (df['a']==a)]['q'].sum()
+        delta = r + self.gamma * self.q_table[self.env.s(s_), self.env.a(a_)]\
+            - self.q_table[self.env.s(s), self.env.a(a)]
         
         self._update_elig(s, a)
         
         # for all s, a: Q(s, a) = Q(s, a) + α * δ * E(s, a)
-        df['q'] = df['q'] + self.alpha * delta * df['elig']
+        self.q_table[:, :] = self.q_table[:, :] + self.alpha * delta * self.elig_table[:, :]
         # E(s, a) = γ * λ * E(s, a)
-        df['elig'] = self.gamma * self.lamda * df['elig']
+        self.elig_table[:, :] = self.gamma * self.lamda * self.elig_table[:, :]
 
     def _update_elig(self, s, a):
-        df = self.table_df
         # accumulating trace
         # E(s, a) = E(s, a) + 1
-        # idx = df[(df['s']==s) & (df['a']==a)].index
-        # df.loc[idx, 'elig'] += 1
+        # self.elig_table[self.env.s(s), self.env.a(a)] += 1
 
         # replacing trace
         # E(s, :) = 0, E(s, a) = 1
-        idx = df[(df['s']==s)].index
-        df.loc[idx, 'elig'] = 0
-        idx = df[(df['s']==s) & (df['a']==a)].index
-        df.loc[idx, 'elig'] = 1
+        self.elig_table[self.env.s(s), :] = 0
+        self.elig_table[self.env.s(s), self.env.a(a)] = 1
 
     def _reset_lamda(self):
-        self.table_df.loc[:, 'elig'] = self.elig_def_val
+        self.elig_table[:, :] = self.elig_def_val
 
     def _reset_episode(self):
         self._reset_lamda()
