@@ -56,16 +56,31 @@ class MarkovEnv(object):
     def set_prob(self, s, a, s_, r, p):
         self.probs_matrix[self.s(s), self.a(a), self.s(s_), self.r(r)] = p
     
-    def prob(self, s, a, s_, r=None):
+    def prob(self, s, a=None, s_=None, r=None):
         """
         p(s_|s, a) = Σ[p(s_, r|s, a)]
         p(s_, r|s, a)
         (s:object, a:object, s_:object, r:object) -> p:float
         """
-        if r == None:
-            return self.probs_matrix[self.s(s), self.a(a), self.s(s_), :].sum()
+        if a == None:
+            if s_ == None:
+                if r == None:
+                    return self.probs_matrix[self.s(s), :, :, :]
+                else:
+                    raise Exception('invalid')
+            else:
+                raise Exception('invalid')
         else:
-            return self.probs_matrix[self.s(s), self.a(a), self.s(s_), self.r(r)]
+            if s_ == None:
+                if r == None:
+                    return self.probs_matrix[self.s(s), self.a(a), :, :]
+                else:
+                    raise Exception('invalid')
+            else:
+                if r == None:
+                    return self.probs_matrix[self.s(s), self.a(a), self.s(s_), :]
+                else:
+                    return self.probs_matrix[self.s(s), self.a(a), self.s(s_), self.r(r)]
 
     def reward(self, s, a, s_=None):
         """
@@ -73,32 +88,40 @@ class MarkovEnv(object):
         r(s, a, s_) = Σ[r * p(s_, r|s, a)] / p(s_|s, a)
         (s:object, a:object, s_:object) -> r:float
         """
+        r = None
+        rewards = np.array(self.rewards_space)
         if s_ == None:
-            probs = self.probs_matrix[self.s(s), self.a(a), :, :]
-            rewards = np.array(self.rewards_space).reshape((-1, 1))
-            return np.matmul(probs, rewards).sum()
+            probs = self.prob(s, a)
+            r = (rewards * probs).sum(axis=1)
         else:
-            # todo
-            probs = self.probs_matrix[self.s(s), self.a(a), self.s(s_), :]
-            rewards = np.array(self.rewards_space).reshape((-1, 1))
-            return np.matmul(probs, rewards).sum() / probs.sum()
+            probs = self.prob(s, a, s_)
+            r = (rewards * probs).sum() / probs.sum()
+        return r
 
     def get_actions(self, s):
         """
         get all available actions from s
         s:object -> a:list<object>
         """
-        probs = self.probs_matrix[self.s(s), :, :, :].sum(axis=(1, 2))
+        probs = self.probs_matrix(s).sum(axis=(1, 2))
         return [a for p, a in zip(probs, self.actions_space) if p > 0]
     
     def get_s_(self, s, a):
         """
         (s:object, a:object) -> s_:object
         """
-        probs = self.probs_matrix[self.s(s), self.a(a), :, :].sum(axis=1)
+        probs = self.prob(s, a).sum(axis=1)
         s_ = np.random.choice(range(self.n_states), p=probs)
         return self.states_space[s_]
     
+    def get_states(self, s, a):
+        """
+        get all available states from s, a
+        (s:object, a:object) -> s:list<object>
+        """
+        probs = self.prob(s, a).sum(axis=1)
+        return [s_ for p, s_ in zip(probs, self.states_space) if p > 0]
+
     def is_terminal(self, s):
         """
         s:object -> b:bool
@@ -288,8 +311,8 @@ class Maze2DEnv(tk.Tk):
     def get_object(self, obs):
         return self.maze_objects.get(obs)
 
-    def move_step(self, a):
-        self.obs, r, done = self.mdp.move_step(self.obs, a)
+    def move_step(self, obs, a):
+        self.obs, r, done = self.mdp.move_step(obs, a)
         return self.obs, r, done
     
     def is_terminal(self, obs):

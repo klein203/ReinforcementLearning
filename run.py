@@ -16,7 +16,7 @@ def ch3_case():
 
     import mdp.starter as ch3
     # ch3.interactive_agent_run()
-    ch3.ch3_6_autocleaner(100)
+    # ch3.ch3_6_autocleaner(100)
 
     weights_path = os.path.join(os.path.realpath('.'), 'mdp', 'temp')
     

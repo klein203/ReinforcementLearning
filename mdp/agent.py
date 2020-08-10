@@ -19,7 +19,7 @@ class InteractiveAgent(AbstractAgent):
         super(InteractiveAgent, self).__init__(env, *args, **kwargs)
     
     def _play(self):
-        _ = self.env.reset()
+        obs = self.env.reset()
         i_step = 0
 
         while True:
@@ -31,7 +31,9 @@ class InteractiveAgent(AbstractAgent):
             else:
                 i_step += 1
             
-            obs_, _, done = self.env.move_step(action)
+            obs_, _, done = self.env.move_step(obs, action)
+
+            obs = obs_
             
             if done:
                 msg = self.env.update_message(obs_)
@@ -92,18 +94,6 @@ class QTableBasedAgent(AIAgent):
                     action = self.env.actions_space[np.random.choice(idxs)]
                 else:
                     action = self.env.actions_space[qvals.argmax()]
-                
-                # if qvals.max() == self.q_def_val:
-                #     qvals
-                #     idx = df[(df['s']==s) & (df['q']==self.q_def_val)].index
-                #     action = df.loc[np.random.choice(idx), 'a']
-                # else:
-                #     q_df = df[(df['s']==s) & (df['a'].isin(actions))]['q']
-                #     if q_df.empty:
-                #         action = None
-                #     else:
-                #         idxmax = q_df.argmax()
-                #         action = df.loc[idxmax, 'a']
             else:
                 action = np.random.choice(actions)
         
@@ -123,7 +113,9 @@ class QTableBasedAgent(AIAgent):
             self.env.render()
             
             a = self.choose_action(obs)
-            obs_, r, done = self.env.move_step(a)
+            obs_, r, done = self.env.move_step(obs, a)
+
+            obs = obs_
             
             if done:
                 msg = self.env.update_message(obs_)
@@ -131,8 +123,6 @@ class QTableBasedAgent(AIAgent):
                 self.env.render()
                 break
 
-            obs = obs_
-        
         self.epsilon = self.epsilon_ori
 
     def play(self, path, load_fname):
@@ -198,7 +188,7 @@ class QLearningAgent(QTableBasedAgent):
                     self.env.render()
                 
                 a = self.choose_action(obs)
-                obs_, r, done = self.env.move_step(a)
+                obs_, r, done = self.env.move_step(obs, a)
 
                 self.learn(obs, a, r, obs_)
 
@@ -228,7 +218,7 @@ class SarsaAgent(QTableBasedAgent):
             q_target = r
         else:
             # Q = R(s, a) + γ * Q(s', a')
-            q_target = r + self.gamma * self.q_table[self.env.s(s_), self.env.a(a_)].sum()
+            q_target = r + self.gamma * self.q_table[self.env.s(s_), self.env.a(a_)]
         
         q_predict = self.q_table[self.env.s(s), self.env.a(a)]
 
@@ -252,7 +242,7 @@ class SarsaAgent(QTableBasedAgent):
                 if self.silent_mode == False:
                     self.env.render()
                 
-                obs_, r, done = self.env.move_step(a)
+                obs_, r, done = self.env.move_step(obs, a)
                 a_ = self.choose_action(obs_)
 
                 self.learn(obs, a, r, obs_, a_)
@@ -313,3 +303,74 @@ class SarsaLambdaAgent(SarsaAgent):
 
     def _reset_episode_params(self):
         self._reset_lamda()
+
+
+class PolicyIteration(QTableBasedAgent):
+    def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, *args, **kwargs):
+        super(PolicyIteration, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
+
+        self.v = np.zeros((self.env.n_states))
+
+    def v_func(self, s):
+        if isinstance(s, Iterable):
+            return [self.v[self.env.s(item)] for item in s]
+        else:
+            return self.v[self.env.s(s)]
+
+    def evaluation(self):
+        self.epsilon = 0
+        theta = 1e-6
+        while True:
+            error = 0
+            for s in self.env.states_space:
+                if self.env.is_terminal(s):
+                    continue
+                
+                # v = V(s)
+                v = self.v_func(s)
+                
+                # V(s) = Σ p(s', r|s, π(s))*[r + γ * V(s')]
+                a = self.choose_action(s)
+                # s_, r, done = self.env.move_step(s, a)
+                self.v[self.env.s(s)] = self.env.prob(s, a) * (r + self.gamma * self.v_func(self.env.get_states(s, a)))
+
+                # delta = max(delta, |v - V(s)|)
+                error = max(error, abs(v - self.v[self.env.s(s)]))
+                print(error)
+            
+            if error < theta:
+                print(self.v)
+                break
+
+    def improvement(self):
+        pass
+        # for i_episode in range(n_episode):
+        # i_step = 0
+        # obs = self.env.reset()
+        # while True:
+        #     i_step += 1
+        #     if self.silent_mode == False:
+        #         self.env.render()
+            
+        #     a = self.choose_action(obs)
+        #     obs_, r, done = self.env.move_step(a)
+
+        #     self.learn(obs, a, r, obs_)
+
+        #     obs = obs_
+            
+        #     if done:
+        #         msg = self.env.update_message(obs_)
+        #         logging.info('Episode [%d], run for [%d] step(s), finally [%s] at [%s]' % (i_episode+1, i_step, msg, obs_))
+                
+        #         if self.silent_mode == False:
+        #             self.env.render()
+        #         break
+    
+    def iteration(self):
+        # init
+        policy_stable = False
+
+        self.evaluation()
+
+        self.improvement()
