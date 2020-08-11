@@ -103,7 +103,7 @@ class MarkovEnv(object):
         get all available actions from s
         s:object -> a:list<object>
         """
-        probs = self.probs_matrix(s).sum(axis=(1, 2))
+        probs = self.prob(s).sum(axis=(1, 2))
         return [a for p, a in zip(probs, self.actions_space) if p > 0]
     
     def get_s_(self, s, a):

@@ -74,7 +74,7 @@ class QTableBasedAgent(AIAgent):
         super(QTableBasedAgent, self).__init__(env, *args, **kwargs)
         self.silent_mode = False
         self.q_def_val = 0
-        self.q_table = np.zeros((self.env.n_states, self.env.n_actions))
+        self.q = np.zeros((self.env.n_states, self.env.n_actions))
         self.gamma = gamma # gamma -> 1, farseer; discount factor
 
         self.epsilon_ori = epsilon
@@ -87,7 +87,7 @@ class QTableBasedAgent(AIAgent):
             action = None
         else:
             if np.random.rand() >= self.epsilon:
-                qvals = self.q_table[self.env.s(s), :]
+                qvals = self.q[self.env.s(s), :]
 
                 if qvals.max() == self.q_def_val:
                     idxs = np.argwhere(qvals==self.q_def_val).reshape(-1)
@@ -144,21 +144,21 @@ class QTableBasedAgent(AIAgent):
         """
         only for easy checking (column original format lost), save well-trained params to file in csv format
         """
-        np.savetxt(os.path.join(path, filename), self.q_table, delimiter=',')
+        np.savetxt(os.path.join(path, filename), self.q, delimiter=',')
 
     def save_pickle(self, path, filename):
         """
         save well-trained params to file in pickle format
         """
         with open(os.path.join(path, filename), 'wb') as fs:
-            pickle.dump(self.q_table, fs)
+            pickle.dump(self.q, fs)
 
     def load_pickle(self, path, filename):
         """
         load params from file in pickle format
         """
         with open(os.path.join(path, filename), 'rb') as fs:
-            self.q_table = pickle.load(fs, encoding='bytes')
+            self.q = pickle.load(fs, encoding='bytes')
 
 
 class QLearningAgent(QTableBasedAgent):
@@ -170,10 +170,10 @@ class QLearningAgent(QTableBasedAgent):
             q_target = r
         else:
             # Q = R(s, a) + γ * maxQ(s', a')
-            q_target = r + self.gamma * self.q_table[self.env.s(s_), :].max()
+            q_target = r + self.gamma * self.q[self.env.s(s_), :].max()
         
-        q_predict = self.q_table[self.env.s(s), self.env.a(a)]
-        self.q_table[self.env.s(s), self.env.a(a)] = q_predict + self.alpha * (q_target - q_predict)
+        q_predict = self.q[self.env.s(s), self.env.a(a)]
+        self.q[self.env.s(s), self.env.a(a)] = q_predict + self.alpha * (q_target - q_predict)
     
     def _train(self, n_episode, n_step=1000, path='.', save_fname=None, load_fname=None):
         if load_fname != None:
@@ -218,11 +218,11 @@ class SarsaAgent(QTableBasedAgent):
             q_target = r
         else:
             # Q = R(s, a) + γ * Q(s', a')
-            q_target = r + self.gamma * self.q_table[self.env.s(s_), self.env.a(a_)]
+            q_target = r + self.gamma * self.q[self.env.s(s_), self.env.a(a_)]
         
-        q_predict = self.q_table[self.env.s(s), self.env.a(a)]
+        q_predict = self.q[self.env.s(s), self.env.a(a)]
 
-        self.q_table[self.env.s(s), self.env.a(a)] = q_predict + self.alpha * (q_target - q_predict)
+        self.q[self.env.s(s), self.env.a(a)] = q_predict + self.alpha * (q_target - q_predict)
 
     def _reset_episode_params(self):
         pass
@@ -278,13 +278,13 @@ class SarsaLambdaAgent(SarsaAgent):
     def learn(self, s, a, r, s_, a_):
         # δ = R(s, a) + γ * Q(s', a') - Q(s, a)
         # q_target - q_predict
-        delta = r + self.gamma * self.q_table[self.env.s(s_), self.env.a(a_)]\
-            - self.q_table[self.env.s(s), self.env.a(a)]
+        delta = r + self.gamma * self.q[self.env.s(s_), self.env.a(a_)]\
+            - self.q[self.env.s(s), self.env.a(a)]
         
         self._update_elig(s, a)
         
         # for all s, a: Q(s, a) = Q(s, a) + α * δ * E(s, a)
-        self.q_table[:, :] = self.q_table[:, :] + self.alpha * delta * self.elig_table[:, :]
+        self.q[:, :] = self.q[:, :] + self.alpha * delta * self.elig_table[:, :]
         # E(s, a) = γ * λ * E(s, a)
         self.elig_table[:, :] = self.gamma * self.lamda * self.elig_table[:, :]
 
@@ -305,72 +305,98 @@ class SarsaLambdaAgent(SarsaAgent):
         self._reset_lamda()
 
 
-class PolicyIteration(QTableBasedAgent):
-    def __init__(self, env, gamma=0.9, lr=0.1, epsilon=0.1, *args, **kwargs):
-        super(PolicyIteration, self).__init__(env, gamma, lr, epsilon, *args, **kwargs)
+class PolicyIteration(AIAgent):
+    def __init__(self, env, gamma=0.9, *args, **kwargs):
+        super(PolicyIteration, self).__init__(env, *args, **kwargs)
+        self.gamma = gamma
 
         self.v = np.zeros((self.env.n_states))
+        self.action_policy = np.random.randint(low=0, high=self.env.n_actions, size=(self.env.n_states))
 
     def v_func(self, s):
-        if isinstance(s, Iterable):
-            return [self.v[self.env.s(item)] for item in s]
-        else:
-            return self.v[self.env.s(s)]
+        return self.v[self.env.s(s)]
 
-    def evaluation(self):
-        self.epsilon = 0
-        theta = 1e-6
+    def choose_action(self, s):
+        return self.env.actions_space[self.action_policy[self.env.s(s)]]
+    
+    def argmax_action(self, s):
+        argmax = None
+        max = -np.inf
+        actions = self.env.get_actions(s)
+
+        for a in actions:
+            states_ = self.env.get_states(s, a)
+            tmp = 0
+            for s_ in states_:
+                tmp += self.env.prob(s, a, s_).sum() * (self.env.reward(s, a, s_) + self.gamma * self.v_func(s_))
+            if tmp > max:
+                max = tmp
+                argmax = a
+        return self.env.a(argmax)
+
+    def update_action_policy(self, s):
+        self.action_policy[self.env.s(s)] = self.argmax_action(s)
+        
+    def policy_eval(self):
+        theta = 1e-3
+        i_step = 0
         while True:
+            i_step += 1
             error = 0
+            v_tmp = np.zeros((self.env.n_states))
             for s in self.env.states_space:
+                # skip terminal states
                 if self.env.is_terminal(s):
                     continue
                 
-                # v = V(s)
+                # v_k = V(s)
                 v = self.v_func(s)
                 
-                # V(s) = Σ p(s', r|s, π(s))*[r + γ * V(s')]
+                # v_k_1 = V(s) = Σ p(s', r|s, π(s))*[r + γ * V(s')]
                 a = self.choose_action(s)
-                # s_, r, done = self.env.move_step(s, a)
-                self.v[self.env.s(s)] = self.env.prob(s, a) * (r + self.gamma * self.v_func(self.env.get_states(s, a)))
+                states_ = self.env.get_states(s, a)
+                for s_ in states_:
+                    v_tmp[self.env.s(s)] = v_tmp[self.env.s(s)] + self.env.prob(s, a, s_).sum() * (self.env.reward(s, a, s_) + self.gamma * self.v_func(s_))
+                
+                # error = max(delta, |v - V(s)|)
+                error = max(error, abs(v - v_tmp[self.env.s(s)]))
 
-                # delta = max(delta, |v - V(s)|)
-                error = max(error, abs(v - self.v[self.env.s(s)]))
-                print(error)
-            
+            # v_k+1
+            self.v = v_tmp.copy()
+
             if error < theta:
-                print(self.v)
+            # if i_step > 1000:
+                print('#', i_step, error, self.v)
                 break
 
-    def improvement(self):
-        pass
-        # for i_episode in range(n_episode):
-        # i_step = 0
-        # obs = self.env.reset()
-        # while True:
-        #     i_step += 1
-        #     if self.silent_mode == False:
-        #         self.env.render()
-            
-        #     a = self.choose_action(obs)
-        #     obs_, r, done = self.env.move_step(a)
+    def policy_impr(self):
+        is_stable = True
+        for s in self.env.states_space:
+            # skip terminal states
+            if self.env.is_terminal(s):
+                continue
 
-        #     self.learn(obs, a, r, obs_)
-
-        #     obs = obs_
+            # choose old-action
+            a = self.choose_action(s)
+            a_tmp = a
             
-        #     if done:
-        #         msg = self.env.update_message(obs_)
-        #         logging.info('Episode [%d], run for [%d] step(s), finally [%s] at [%s]' % (i_episode+1, i_step, msg, obs_))
+            # compute new-action
+            self.update_action_policy(s)
+
+            # change it to unstable state when old-action != new-action
+            a = self.choose_action(s)
+            if a_tmp != a:
+                is_stable = False
                 
-        #         if self.silent_mode == False:
-        #             self.env.render()
-        #         break
+        return is_stable
     
-    def iteration(self):
-        # init
-        policy_stable = False
+    def policy_iter(self):
+        is_stable = False
 
-        self.evaluation()
-
-        self.improvement()
+        while is_stable == False:
+            # run policy evaluation when policy is not stable, else we find V ~= v*, π ~= π*
+            self.policy_eval()
+            is_stable = self.policy_impr()
+        
+        logging.info(self.v)
+        logging.info(self.action_policy)
