@@ -19,9 +19,9 @@ def interactive_agent_run():
     player = InteractiveAgent(env)
     player.play()
 
-def ch3_6_autocleaner(n_step=20):
+def ch3_1_autocleaner(n_step=20):
     """
-    chapter 3.6 (page xxx)
+    chapter 3.1 (page 50)
     a typical MDP process demo
     """
     cfg = mdp.autocleaner_mdp_config
@@ -84,7 +84,7 @@ def ch3_sarsa_lambda(mode='train', n_episode=200, path='.', filename='sarsa_lamb
     else:
         raise Exception('invalid mode')
 
-def ch3_gridworld_policy_iteration():
+def ch4_3_gridworld_policy_iteration():
     env = Maze2DEnv(config=mdp.gridworld_config)
     agent = PolicyIteration(env)
     agent.policy_iter()
@@ -100,7 +100,7 @@ def ch3_gridworld_policy_iteration():
                 line = '%s\t%s(%.2f)' % (line, env.actions_space[agent.action_policy[env.s((c, r))]], agent.get_v((c, r)))
         logging.info(line)
 
-def ch3_gridworld_value_iteration():
+def ch4_4_gridworld_value_iteration():
     env = Maze2DEnv(config=mdp.gridworld_config)
     agent = ValueIteration(env)
     agent.value_iter()
