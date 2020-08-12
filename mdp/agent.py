@@ -338,7 +338,7 @@ class PolicyIteration(AIAgent):
         self.action_policy[self.env.s(s)] = self.argmax_action(s)
         
     def policy_eval(self):
-        theta = 1e-3
+        theta = 1e-4
         i_step = 0
         while True:
             i_step += 1
@@ -365,8 +365,9 @@ class PolicyIteration(AIAgent):
             self.v = v_tmp.copy()
 
             if error < theta:
-            # if i_step > 1000:
-                print('#', i_step, error, self.v)
+                logging.info('After %d times policy evaluation:' % i_step)
+                logging.info('error = %.6f' % error)
+                logging.info('v = %s' % self.v)
                 break
 
     def policy_impr(self):
@@ -397,6 +398,4 @@ class PolicyIteration(AIAgent):
             # run policy evaluation when policy is not stable, else we find V ~= v*, π ~= π*
             self.policy_eval()
             is_stable = self.policy_impr()
-        
-        logging.info(self.v)
-        logging.info(self.action_policy)
+

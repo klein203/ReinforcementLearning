@@ -117,7 +117,7 @@ class MarkovEnv(object):
     def get_states(self, s, a):
         """
         get all available states from s, a
-        (s:object, a:object) -> s:list<object>
+        (s:object, a:object) -> s_:list<object>
         """
         probs = self.prob(s, a).sum(axis=1)
         return [s_ for p, s_ in zip(probs, self.states_space) if p > 0]
@@ -126,62 +126,64 @@ class MarkovEnv(object):
         """
         s:object -> b:bool
         """
-        probs = self.probs_matrix[self.s(s), :, :, :].sum()
+        probs = self.prob(s).sum()
         return probs == 0
 
     def move_step(self, s, a):
         s_ = self.get_s_(s, a)
-        r = self.reward(s, a)
+        r = self.reward(s, a, s_)
         done = self.is_terminal(s_)
         return s_, r, done
 
 
-class Maze2DEnv(tk.Tk):
+class Maze2DEnv(tk.Tk, MarkovEnv):
     def __init__(self, config, *args, **kwargs):
-        # tk init
+        # tk init, graphic settings
         super(Maze2DEnv, self).__init__(*args, **kwargs)
-        self.win_title_name = config.get('title_name', 'Maze2D')
-        self.title(self.win_title_name)
-        
+
+        # unit grid pixel
+        self.u_px = config.get('unit_pixel', 35)
+
         # render frequency, default 0.5s for rendering interval
         self.win_refresh_interval = config.get('refresh_interval', 0.5)
         
-        # unit grid pixel
-        self.u_px = config.get('unit_pixel', 35)
-        
-        # 2D shape, eg: cols x rows: 5 x 4
+        # Maze2D init, shape, eg: cols x rows: 5 x 4
         self.maze_shape = config.get('shape', (5, 4))
         self.maze_ncols = self.maze_shape[0]
         self.maze_nrows = self.maze_shape[1]
 
-        # entry, miners, exit in maze
-        self.maze_objects = config.get('maze_objects', {(self.maze_ncols-1, self.maze_nrows-1): 'exit'})
-
-        key_bindings = config.get('key_bindings', None)
-        self.key_bindings = self._init_key_bindings(key_bindings)
-        self.origin = config.get('origin', (0, 0))
+        # windows
+        self.win_title_name = config.get('title_name', 'Maze2D')
+        self.title(self.win_title_name)
 
         scn_w_px, scn_h_px = self.winfo_screenwidth(), self.winfo_screenheight()
         self.win_w_px, self.win_h_px = self.maze_ncols * self.u_px, self.maze_nrows * self.u_px
         self.geometry('%dx%d+%d+%d' % (self.win_w_px, self.win_h_px, scn_w_px - self.win_w_px, scn_h_px - self.win_h_px))
 
-        self.manual_mode = False
-        self.msg = None
-        self.msg_canvas = None
+        # entry, miners, exit in maze
+        self.maze_objects = config.get('maze_objects')
+        self.maze_object_rewards = config.get('maze_object_rewards')
 
-        # observation, default (0, 0) (from the very left/top position)
+        # controller init, actions & key bindings
+        self.actions = config.get('actions')
+        self._init_key_bindings(config)
+
+        # obs, default (0, 0) (from the very left/top position)
+        self.origin = config.get('origin', (0, 0))
         self.obs = self.origin
         self.obs_canvas = None
 
-        # init MDP
-        self.actions_space = self._init_actions_space(key_bindings)
-        self.states_space = self._init_states_space(self.maze_ncols, self.maze_nrows)
-        self.rewards_space = self._init_rewards_space(config.get('rewards_space'))
+        # canvas msg
+        self.msg = None
+        self.msg_canvas = None
 
-        self.mdp = MarkovEnv(self.states_space, self.actions_space, self.rewards_space)
-        self._init_p_data(config.get('p_matrix', None))
+        # agent play mode
+        self.manual_mode = False
 
-        # draw maze
+        # init markov env
+        self._init_markov_env(config)
+
+        # init canvas, draw maze
         self.canvas = tk.Canvas(self, bg='white',
                                 width=self.maze_ncols * self.u_px,
                                 height=self.maze_nrows * self.u_px)
@@ -189,61 +191,63 @@ class Maze2DEnv(tk.Tk):
 
         self.draw_all(self.canvas)
         self.update()
+    
+    def _init_markov_env(self, config):
+        states_space = list(iter.product(range(self.maze_ncols), range(self.maze_nrows)))
+        actions_space = self.actions
 
-    def _init_controllers(self, maze_controllers):
-        list(maze_controllers.keys())
+        rewards_space = list(self.maze_object_rewards.values())
+        
+        MarkovEnv.__init__(self, states_space, actions_space, rewards_space)
+        self._init_probs_matrix()
+        
+    def _init_probs_matrix(self):
+        for s in self.states_space:
+            if s in self.maze_objects.keys():
+                continue
+            
+            for a in self.actions_space:
+                if a == 'left':
+                    s_ = (max(s[0]-1, 0), s[1])
+                elif a == 'right':
+                    s_ = (min(s[0]+1, self.maze_ncols-1), s[1])
+                elif a == 'up':
+                    s_ = (s[0], max(s[1]-1, 0))
+                elif a == 'down':
+                    s_ = (s[0], min(s[1]+1, self.maze_nrows-1))
+                
+                r = self._get_maze_object_reward(s_)
+                self.set_prob(s, a, s_, r, 1)
 
-    def _init_key_bindings(self, key_bindings):
-        bindings = dict()
-        for action, keys in key_bindings.items():
+    
+    def _get_maze_object_reward(self, obs):
+        reward = self.maze_object_rewards.get('default')
+        if obs in self.maze_objects.keys():
+            obj = self._get_maze_object(obs)
+            reward = self.maze_object_rewards.get(obj)
+        return reward
+
+    def _init_key_bindings(self, config):
+        self.key_bindings = dict()
+        for action, keys in config.get('key_bindings').items():
             for key in keys:
-                bindings[key] = action
-        return bindings
-
-    def _init_actions_space(self, key_bindings):
-        return list(key_bindings.keys())
-
-    def _init_states_space(self, ncols, nrows):
-        return list(iter.product(range(ncols), range(nrows)))
-    
-    def _init_rewards_space(self, rewards_space):
-        return rewards_space
-
-    def _init_p_data(self, data):
-        for d in data:
-            self.mdp.set_prob(d[0], d[1], d[2], d[3], d[4])
-    
-    def _init_r_data(self, data):
-        return data
-
-    @property
-    def n_states(self):
-        return len(self.mdp.states_space)
-
-    @property
-    def n_actions(self):
-        return len(self.mdp.actions_space)
-
-    @property
-    def n_rewards(self):
-        return len(self.mdp.rewards_space)
-    
-    def s(self, s):
-        return self.mdp.states_dict.get(s, None)
-    
-    def a(self, a):
-        return self.mdp.actions_dict.get(a, None)
-    
-    def r(self, r):
-        return self.mdp.rewards_dict.get(r, None)
+                self.key_bindings[key] = action
 
     def reset(self):
-        # reset observation
+        # reset obs
         self.obs = self.origin
+
         # reset message
         self.msg = None
         return self.obs
-    
+        
+    def move_step(self, s, a):
+        s_ = self.get_s_(s, a)
+        r = self.reward(s, a, s_)
+        done = self.is_terminal(s_)
+        self.obs = s_
+        return s_, r, done
+
     def redraw_partial(self, canvas):
         if self.obs_canvas != None:
             canvas.delete(self.obs_canvas)
@@ -266,7 +270,7 @@ class Maze2DEnv(tk.Tk):
                 fill='red')
     
     def update_message(self, obs):
-        obj = self.get_object(obs)
+        obj = self._get_maze_object(obs)
         if obj == 'exit':
             self.msg = 'WIN'
         else:
@@ -308,18 +312,8 @@ class Maze2DEnv(tk.Tk):
         self.redraw_partial(self.canvas)
         self.update()
     
-    def get_object(self, obs):
+    def _get_maze_object(self, obs):
         return self.maze_objects.get(obs)
-
-    def move_step(self, obs, a):
-        self.obs, r, done = self.mdp.move_step(obs, a)
-        return self.obs, r, done
-    
-    def is_terminal(self, obs):
-        return self.mdp.is_terminal(obs)
-
-    def get_actions(self, obs):
-        return self.mdp.get_actions(obs)
     
     def disable_manual_mode(self):
         self.manual_mode = False

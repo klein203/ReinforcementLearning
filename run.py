@@ -21,7 +21,7 @@ def ch3_case():
     weights_path = os.path.join(os.path.realpath('.'), 'mdp', 'temp')
     
     filename = 'q_learning_%s_0' % today
-    # ch3.ch3_qlearning(mode='train', n_episode=100, path=weights_path, filename=filename, load_file=False, silent_mode=True)
+    # ch3.ch3_qlearning(mode='train', n_episode=200, path=weights_path, filename=filename, load_file=False, silent_mode=True)
     # ch3.ch3_qlearning(mode='play', path=weights_path, filename=filename)
     
     filename = 'sarsa_%s_0' % today
@@ -31,6 +31,8 @@ def ch3_case():
     filename = 'sarsa_lambda_%s_0' % today
     # ch3.ch3_sarsa_lambda(mode='train', n_episode=200, path=weights_path, filename=filename, load_file=False, silent_mode=True)
     # ch3.ch3_sarsa_lambda(mode='play', path=weights_path, filename=filename)
+
+    ch3.ch3_gridworld_policy_iteration()
 
 
 if __name__ == "__main__":
