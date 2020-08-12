@@ -6,7 +6,8 @@ import numpy as np
 # import seaborn as sns
 import mdp
 from mdp.env import Maze2DEnv, MarkovEnv
-from mdp.agent import InteractiveAgent, QLearningAgent, SarsaAgent, SarsaLambdaAgent, PolicyIteration
+from mdp.agent import InteractiveAgent, QLearningAgent, SarsaAgent, SarsaLambdaAgent, \
+    PolicyIteration, ValueIteration
 
 
 def interactive_agent_run():
@@ -89,12 +90,28 @@ def ch3_gridworld_policy_iteration():
     agent.policy_iter()
 
     # report
-    logging.info('π*(v*)')
+    logging.info('Policy Iteration - π*(v*)')
     for r in range(env.maze_nrows):
         line = ''
         for c in range(env.maze_ncols):
             if env.is_terminal((c, r)):
                 line = '%s\t%s(%s)' % (line, '--', '-.--')
             else:
-                line = '%s\t%s(%.2f)' % (line, env.actions_space[agent.action_policy[env.s((c, r))]], agent.v_func((c, r)))
+                line = '%s\t%s(%.2f)' % (line, env.actions_space[agent.action_policy[env.s((c, r))]], agent.get_v((c, r)))
+        logging.info(line)
+
+def ch3_gridworld_value_iteration():
+    env = Maze2DEnv(config=mdp.gridworld_config)
+    agent = ValueIteration(env)
+    agent.value_iter()
+
+    # report
+    logging.info('Value Iteration - π*(v*)')
+    for r in range(env.maze_nrows):
+        line = ''
+        for c in range(env.maze_ncols):
+            if env.is_terminal((c, r)):
+                line = '%s\t%s(%s)' % (line, '--', '-.--')
+            else:
+                line = '%s\t%s(%.2f)' % (line, env.actions_space[agent.action_policy[env.s((c, r))]], agent.get_v((c, r)))
         logging.info(line)

@@ -32,7 +32,8 @@ def ch3_case():
     # ch3.ch3_sarsa_lambda(mode='train', n_episode=200, path=weights_path, filename=filename, load_file=False, silent_mode=True)
     # ch3.ch3_sarsa_lambda(mode='play', path=weights_path, filename=filename)
 
-    ch3.ch3_gridworld_policy_iteration()
+    # ch3.ch3_gridworld_policy_iteration()
+    # ch3.ch3_gridworld_value_iteration()
 
 
 if __name__ == "__main__":

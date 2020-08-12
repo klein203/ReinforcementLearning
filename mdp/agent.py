@@ -313,29 +313,38 @@ class PolicyIteration(AIAgent):
         self.v = np.zeros((self.env.n_states))
         self.action_policy = np.random.randint(low=0, high=self.env.n_actions, size=(self.env.n_states))
 
-    def v_func(self, s):
+    def get_v(self, s):
         return self.v[self.env.s(s)]
 
-    def choose_action(self, s):
-        return self.env.actions_space[self.action_policy[self.env.s(s)]]
+    def update_v(self, s, val):
+        self.v[self.env.s(s)] = val
+
+    def get_action_policy(self, s):
+        return self.action_policy[self.env.s(s)]
+
+    def update_action_policy(self, s, val):
+        self.action_policy[self.env.s(s)] = self.env.a(val)
     
-    def argmax_action(self, s):
-        argmax = None
-        max = -np.inf
+    def choose_action(self, s):
+        return self.env.actions_space[self.get_action_policy(s)]
+    
+    def _compute_v(self, s, a):
+        states_ = self.env.get_states(s, a)
+        v = 0
+        for s_ in states_:
+            v += self.env.prob(s, a, s_).sum() * (self.env.reward(s, a, s_) + self.gamma * self.get_v(s_))
+        return v
+    
+    def _argmax_action(self, s):
+        a_argmax = None
+        v_max = -np.inf
         actions = self.env.get_actions(s)
-
         for a in actions:
-            states_ = self.env.get_states(s, a)
-            tmp = 0
-            for s_ in states_:
-                tmp += self.env.prob(s, a, s_).sum() * (self.env.reward(s, a, s_) + self.gamma * self.v_func(s_))
-            if tmp > max:
-                max = tmp
-                argmax = a
-        return self.env.a(argmax)
-
-    def update_action_policy(self, s):
-        self.action_policy[self.env.s(s)] = self.argmax_action(s)
+            v = self._compute_v(s, a)
+            if v > v_max:
+                v_max = v
+                a_argmax = a
+        return a_argmax, v_max
         
     def policy_eval(self):
         theta = 1e-4
@@ -343,26 +352,21 @@ class PolicyIteration(AIAgent):
         while True:
             i_step += 1
             error = 0
-            v_tmp = np.zeros((self.env.n_states))
             for s in self.env.states_space:
                 # skip terminal states
                 if self.env.is_terminal(s):
                     continue
                 
                 # v_k = V(s)
-                v = self.v_func(s)
+                v_old = self.get_v(s)
                 
-                # v_k_1 = V(s) = Σ p(s', r|s, π(s))*[r + γ * V(s')]
+                # v_k+1 = V(s) = Σ p(s', r|s, π(s))*[r + γ * V(s')]
                 a = self.choose_action(s)
-                states_ = self.env.get_states(s, a)
-                for s_ in states_:
-                    v_tmp[self.env.s(s)] = v_tmp[self.env.s(s)] + self.env.prob(s, a, s_).sum() * (self.env.reward(s, a, s_) + self.gamma * self.v_func(s_))
-                
-                # error = max(delta, |v - V(s)|)
-                error = max(error, abs(v - v_tmp[self.env.s(s)]))
+                v = self._compute_v(s, a)
+                self.update_v(s, v)
 
-            # v_k+1
-            self.v = v_tmp.copy()
+                # error = max(error, |v - V(s)|)
+                error = max(error, abs(v_old - v))
 
             if error < theta:
                 logging.info('After %d times policy evaluation:' % i_step)
@@ -378,15 +382,14 @@ class PolicyIteration(AIAgent):
                 continue
 
             # choose old-action
-            a = self.choose_action(s)
-            a_tmp = a
+            a_old = self.choose_action(s)
             
-            # compute new-action
-            self.update_action_policy(s)
+            a_argmax, _ = self._argmax_action(s)
+            self.update_action_policy(s, a_argmax)
 
             # change it to unstable state when old-action != new-action
             a = self.choose_action(s)
-            if a_tmp != a:
+            if a_old != a:
                 is_stable = False
                 
         return is_stable
@@ -399,3 +402,69 @@ class PolicyIteration(AIAgent):
             self.policy_eval()
             is_stable = self.policy_impr()
 
+
+class ValueIteration(AIAgent):
+    def __init__(self, env, gamma=0.9, *args, **kwargs):
+        super(ValueIteration, self).__init__(env, *args, **kwargs)
+        self.gamma = gamma
+
+        self.v = np.zeros((self.env.n_states))
+        self.action_policy = np.random.randint(low=0, high=self.env.n_actions, size=(self.env.n_states))
+
+    def get_v(self, s):
+        return self.v[self.env.s(s)]
+
+    def update_v(self, s, val):
+        self.v[self.env.s(s)] = val
+
+    def get_action_policy(self, s):
+        return self.action_policy[self.env.s(s)]
+
+    def update_action_policy(self, s, val):
+        self.action_policy[self.env.s(s)] = self.env.a(val)
+    
+    def _compute_v(self, s, a):
+        states_ = self.env.get_states(s, a)
+        v = 0
+        for s_ in states_:
+            v += self.env.prob(s, a, s_).sum() * (self.env.reward(s, a, s_) + self.gamma * self.get_v(s_))
+        return v
+    
+    def _argmax_action(self, s):
+        a_argmax = None
+        v_max = -np.inf
+        actions = self.env.get_actions(s)
+        for a in actions:
+            v = self._compute_v(s, a)
+            if v > v_max:
+                v_max = v
+                a_argmax = a
+        return a_argmax, v_max
+
+    def value_iter(self):
+        theta = 1e-4
+        i_step = 0
+        while True:
+            i_step += 1
+            error = 0
+            for s in self.env.states_space:
+                # skip terminal states
+                if self.env.is_terminal(s):
+                    continue
+                
+                # v_k = V(s)
+                v = self.get_v(s)
+
+                # v_k+1 = max_a(Σ p(s', r|s, a)*[r + γ * V(s')])
+                a_argmax, v_max = self._argmax_action(s)
+                self.update_v(s, v_max)
+                self.update_action_policy(s, a_argmax)
+            
+                # error = max(error, |v - V(s)|)
+                error = max(error, abs(v - v_max))
+
+            if error < theta:
+                logging.info('After %d times value iteration:' % i_step)
+                logging.info('error = %.6f' % error)
+                logging.info('v = %s' % self.v)
+                break
