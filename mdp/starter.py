@@ -115,3 +115,4 @@ def ch4_4_gridworld_value_iteration():
             else:
                 line = '%s\t%s(%.2f)' % (line, env.actions_space[agent.action_policy[env.s((c, r))]], agent.get_v((c, r)))
         logging.info(line)
+

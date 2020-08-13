@@ -7,6 +7,7 @@ project for reinforcement learning practice, based on RL Bible from Sutton
 - pandas 1.0.3
 - matplotlib 3.2.1
 - seaborn 0.10.1
+- gym 0.17.2
 
 # Chapter 2 - Multi-Armed Bandit Problem
 - Bandit env
