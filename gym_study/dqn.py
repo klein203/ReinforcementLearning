@@ -6,6 +6,8 @@ from keras.layers import Dense
 from keras.optimizers import Adam, RMSprop
 from keras.losses import MSE
 import gym
+from tensorflow.keras.callbacks import TensorBoard
+import time
 
 
 class DQNAgent(object):
@@ -15,15 +17,14 @@ class DQNAgent(object):
         self.n_actions = n_actions
         self.gamma = 0.9  # decay rate
         self.learning_rate = learning_rate
-        self.epsilon = epsilon
         self.reward_decay = reward_decay    # gamma
-
         
         self.weight_sync_interval = weight_sync_interval
         self.batch_size = batch_size
         self.epsilon_max = e_greedy
         self.epsilon_increment = e_greedy_increment
-        self.epsilon = 0 if e_greedy_increment is not None else self.epsilon_max
+        self.epsilon = epsilon
+        # self.epsilon = 0 if e_greedy_increment is not None else self.epsilon_max
 
         self.learn_step_counter = 0
 
@@ -31,7 +32,7 @@ class DQNAgent(object):
 
         # initialize replay memory D to capacity N
         self.memory_size = memory_size
-        self.memory = np.zeros((self.memory_size, self.n_features * 2 + 2))
+        self.memory = np.zeros((self.memory_size, self.n_features * 2 + 3))
         self.memory_counter = 0
 
         # initialize action-value function Q with random weights theta
@@ -39,6 +40,10 @@ class DQNAgent(object):
         
         # initialize target action-value function Q^ with random weights theta^ = theta
         self.target_net = self._build_model(n_features, n_actions)  # target, fact
+        
+        self.tensorboard = TensorBoard(log_dir='logs/DQN')
+
+        self.nb_train = 0
 
     def _build_model(self, input_dim, out_dim):
         model = Sequential()
@@ -56,26 +61,29 @@ class DQNAgent(object):
 
         # With probability epsilon, select a random action a_t
         # otherwise select a_t = argmax_a Q(obs(s_t), a; theta)
-        if np.random.uniform() >= self.epsilon:
+        if np.random.uniform() < self.epsilon:
             a = np.random.randint(0, self.n_actions)
         else:
             a_probs = self.eval_net.predict(obs)
             a = np.argmax(a_probs)
         return a
 
-    def save_transition(self, obs, a, r, obs_):
-        transition = np.hstack((obs, a, r, obs_))
+    def save_transition(self, obs, a, r, done, obs_):
+        transition = np.hstack((obs, a, r, done, obs_))
         index = self.memory_counter % self.memory_size
         self.memory[index, :] = transition
         self.memory_counter += 1
     
     def learn(self):
+        if self.memory_counter < 200:
+            return 
+            
         # sample random minibatch of transitions (obs_j, a_j, r_j, obs_j+1) from D
         sample_index = np.random.choice(min(self.memory_size, self.memory_counter), size=self.batch_size)
         batch = self.memory[sample_index, :]
 
         # compute q_target
-        # trick
+        # magic
         q_eval_tmp = self.eval_net.predict(batch[:, :self.n_features])
         q_target = q_eval_tmp.copy()
         
@@ -83,16 +91,17 @@ class DQNAgent(object):
         batch_idx = np.arange(self.batch_size, dtype=np.int32)
         # only update parameters with obs_j, a_j
         a = batch[:, self.n_features].astype(int)
-        
-        # r
+
         r = batch[:, self.n_features+1]
         q_target_obs_ = self.target_net.predict(batch[:, -self.n_features:])
+        done = batch[:, self.n_features+2].astype(int)
 
-        q_target[batch_idx, a] = r + self.gamma * np.max(q_target_obs_, axis=1)
+        q_target[batch_idx, a] = r + self.gamma * np.max(q_target_obs_, axis=1) * (1 - done)
         
         # perform a gradient descent step on (y_target - Q_eval(obs_j, a_j; theta))^2 
         # with respect to the network parameters theta
-        self.eval_net.fit(batch[:, :self.n_features], q_target, epochs=10, verbose=0)
+        self.eval_net.fit(batch[:, :self.n_features], q_target, epochs=self.nb_train+1, initial_epoch=self.nb_train, verbose=2, callbacks=[self.tensorboard])
+        self.nb_train += 1
 
         # self.epsilon = self.epsilon + self.epsilon_increment if self.epsilon < self.epsilon_max else self.epsilon_max
 
@@ -103,7 +112,7 @@ class DQNAgent(object):
 
     def sync_weights(self):
         self.target_net.set_weights(self.eval_net.get_weights())
-        logging.info('sync weights from eval net paras to target net paras')
+        # logging.info('sync weights from eval net paras to target net paras')
     
     def save_weights(self, filename):
         self.eval_net.save_weights(filename)
@@ -119,8 +128,8 @@ def train(env, agent):
         agent.load_weights(weight_filename)
 
     # for episode = 1, M do
-    n_episodes = 1000
-    for i_episode in range(n_episodes):
+    n_episodes = 100
+    for i_episode in range(1, n_episodes+1):
         # initialize sequence s_1 = {x_1} and preprocessed sequence obs_1 = obs(s_1)
         obs = env.reset()
 
@@ -134,21 +143,23 @@ def train(env, agent):
             obs_, r, done, info = env.step(a)
 
             # store transition (obs_t, a_t, r_t, obs_t+1) in D
-            agent.save_transition(obs, a, r, obs_)
+            agent.save_transition(obs, a, r, done, obs_)
 
             agent.learn()
 
-            obs = obs_
+            obs = obs_.copy()
 
             if done:
                 logging.info('episode: %d|%d, score: %d' % (i_episode, n_episodes, tick))
                 break
     
-    agent.save_weights(weight_filename)
+        if i_episode % 50 == 0:
+            agent.save_weights(weight_filename)
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
     env = gym.make('CartPole-v0')
     agent = DQNAgent(4, 2, learning_rate=1e-2, reward_decay=0.9, e_greedy=0.9,\
         weight_sync_interval=10, memory_size=4000)
