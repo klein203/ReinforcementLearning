@@ -2,14 +2,14 @@ import numpy as np
 
 
 class AbstractPolicy(object):
-    def __init__(self, nb_action: int, *args, **kwargs):
+    def __init__(self, nb_actions: int, *args, **kwargs):
         self.name = 'AbstractPolicy'
-        self.nb_action = nb_action
+        self.nb_actions = nb_actions
     
     def spec(self) -> dict:
         return {
             'name': self.name,
-            'nb_actions': self.nb_action,
+            'nb_actions': self.nb_actions,
             'desc': 'abstract policy',
         }
     
@@ -28,12 +28,12 @@ class RandomPolicy(AbstractPolicy):
     def spec(self) -> dict:
         return {
             'name': self.name,
-            'nb_actions': self.nb_action,
+            'nb_actions': self.nb_actions,
             'desc': 'random policy for action choosing with equal probability',
         }
         
     def choose(self, *args, **kwargs) -> int:
-        action = np.random.choice(nb_action)
+        action = np.random.choice(self.nb_actions)
         return action
 
 
@@ -46,7 +46,7 @@ class EpsilonGreedyPolicy(AbstractPolicy):
     def spec(self) -> dict:
         return {
             'name': self.name,
-            'nb_actions': self.nb_action,
+            'nb_actions': self.nb_actions,
             'episilon': self.epsilon,
             'desc': 'choose argmax(action_vals) while random value larger than episilon. \
                 otherwise, choose random action.',
@@ -56,7 +56,7 @@ class EpsilonGreedyPolicy(AbstractPolicy):
         if np.random.rand() >= self.epsilon:
             action = np.argmax(action_vals)
         else:
-            action = np.random.choice(self.nb_action)
+            action = np.random.choice(self.nb_actions)
         return action
 
 
@@ -68,7 +68,7 @@ class GreedyPolicy(AbstractPolicy):
     def spec(self) -> dict:
         return {
             'name': self.name,
-            'nb_actions': self.nb_action,
+            'nb_actions': self.nb_actions,
             'desc': 'always choose argmax(action_vals). same as EpsilonGreedyPolicy(epsilon=0.0)',
         }
         
@@ -78,14 +78,14 @@ class GreedyPolicy(AbstractPolicy):
 
 
 class SoftmaxPolicy(AbstractPolicy):
-    def __init__(self, nb_actions: int *args, **kwargs):
+    def __init__(self, nb_actions: int, *args, **kwargs):
         super(SoftmaxPolicy, self).__init__(nb_actions, *args, **kwargs)
         self.name = 'SoftmaxPolicy'
 
     def spec(self) -> dict:
         return {
             'name': self.name,
-            'nb_actions': self.nb_action,
+            'nb_actions': self.nb_actions,
             'desc': 'choose actions randomly under softmax(action_vals) probabilities',
         }
     

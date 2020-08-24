@@ -38,6 +38,10 @@ def ch6_case():
     # mdp.ch3_sarsa_lambda(mode='train', n_episode=200, path=weights_path, filename=filename, load_file=False, silent_mode=True)
     # mdp.ch3_sarsa_lambda(mode='play', path=weights_path, filename=filename)
 
+def gym_study():
+    import gym_study.starter as gym_starter
+    # gym_starter.dqn_agent_train()
+    gym_starter.dqn_agent_play()
 
 
 if __name__ == "__main__":
@@ -48,6 +52,7 @@ if __name__ == "__main__":
 
     # ch2_case()
     # ch3_case()
-    ch4_case()
+    # ch4_case()
 
     # ch6_case()
+    gym_study()

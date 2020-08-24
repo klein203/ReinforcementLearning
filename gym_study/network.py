@@ -4,6 +4,7 @@ from keras.layers import Dense
 
 class DeepQNetwork(Sequential):
     def __init__(self, input_dim: int, output_dim: int):
+        super(DeepQNetwork, self).__init__()
         self._build_model(input_dim, output_dim)
 
     def _build_model(self, input_dim: int, output_dim: int):
