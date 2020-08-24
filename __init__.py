@@ -2,4 +2,4 @@
 @author: xusheng
 '''
 
-__all__ = ['bandit', 'mdp', 'utils']
+__all__ = ['bandit', 'mdp', 'utils', 'policy', 'buffer']
