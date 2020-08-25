@@ -9,6 +9,7 @@ from copy import deepcopy
 from gym_study.replay_buffer import ReplayBuffer
 from gym_study.network import DeepQNetwork
 from gym_study.policy import AbstractPolicy, EpsilonGreedyPolicy, GreedyPolicy, RandomPolicy
+from gym_study.utils import HistoryManager
 
 
 class DQNAgent(object):
@@ -40,6 +41,9 @@ class DQNAgent(object):
         self.nb_global_steps = 0
 
         self.nb_learn_counter = 0
+
+        # history manager
+        self.history_manager = HistoryManager('histories.pickle', nb_batch_save_interval=50)
 
     def store_transition(self, obs, a, r, done, obs_):
         transition = np.hstack((obs.flatten(), a, r, done, obs_.flatten()))
@@ -83,11 +87,11 @@ class DQNAgent(object):
                     self.learn(batch_size)
                 
                 # every C steps, reset target_net = main_net, that is to sync theta_eval to theta_target
-                if self.nb_learn_counter % nb_weight_sync_interval == 0:
+                if self.nb_learn_counter > 0 and self.nb_learn_counter % nb_weight_sync_interval == 0:
                     self.sync_weights()
                 
                 # save weights periodically
-                if self.nb_learn_counter % nb_weight_save_interval == 0:
+                if self.nb_learn_counter > 0 and self.nb_learn_counter % nb_weight_save_interval == 0:
                     logging.info('saving weights @%d times' % self.nb_learn_counter)
                     self.save_weights(weight_filename)
 
@@ -98,6 +102,9 @@ class DQNAgent(object):
                 if done:
                     logging.info('Training Episode: %d|%d, Times: %d' % (i_episode, nb_episodes, t))
                     break
+        
+        # dump remaining histories in cache into file
+        self.history_manager.dump()
 
     def learn(self, batch_size: int = 32):
         # sample random minibatch of transitions (obs_j, a_j, r_j, obs_j+1) from D
@@ -123,7 +130,8 @@ class DQNAgent(object):
         # with respect to the network parameters theta
         history = self.main_net.fit(batch[:, :self.nb_features], q_target, epochs=self.nb_learn_counter+1, \
             initial_epoch=self.nb_learn_counter, verbose=0)
-        # logging.info(history)
+        
+        self.history_manager.save(history)
 
         self.nb_learn_counter += 1
 
