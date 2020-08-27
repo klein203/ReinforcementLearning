@@ -40,8 +40,11 @@ def ch6_case():
 
 def gym_study():
     import gym_study.starter as gym_starter
-    # gym_starter.dqn_agent_train()
-    gym_starter.dqn_agent_play()
+    
+    weight_filename = 'dqn_weights_cartpole_v1.h5'
+
+    # gym_starter.dqn_agent_train(nb_episodes=500, weight_filename=weight_filename, load_config=True)
+    gym_starter.dqn_agent_play(nb_episodes=10, weight_filename=weight_filename)
 
 
 if __name__ == "__main__":
