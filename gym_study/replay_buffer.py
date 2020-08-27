@@ -56,10 +56,10 @@ class SumTree(object):
         while True:
             if cur_idx >= self.capacity:
                 # find leaf node
-                
+                break
             else:
                 # downward search
-                l_idx = (cur_idx + 1) * 2 - 1
+                l_idx = cur_idx * 2 + 1 # (cur_idx + 1) * 2 - 1
                 r_idx = l_idx + 1
                 if self.p_tree[l_idx] > v:
                     cur_idx = l_idx
@@ -67,6 +67,7 @@ class SumTree(object):
                     v -= self.p_tree[l_idx]
                     cur_idx = r_idx
 
+        return self.p_tree[cur_idx], self.buffer[cur_idx - (self.capacity - 1)]
 
     
     def sum_p(self):
