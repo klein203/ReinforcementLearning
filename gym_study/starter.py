@@ -1,6 +1,6 @@
 import logging
 import gym
-from gym_study.agent import DQNAgent
+from gym_study.agent import DoubleDQNAgent
 from gym_study.policy import EpsilonGreedyPolicy, GreedyPolicy
 
 
@@ -14,7 +14,7 @@ def dqn_agent_train(weight_filename: str, nb_episodes: int = 500, load_config: b
     train_policy = EpsilonGreedyPolicy(nb_actions)    # epsilon = 0.1
     eval_policy = GreedyPolicy(nb_actions)
 
-    agent = DQNAgent(nb_features, nb_actions, train_policy, eval_policy)
+    agent = DoubleDQNAgent(nb_features, nb_actions, train_policy, eval_policy)
 
     agent.train(env, nb_episodes=nb_episodes, nb_warmup_steps=200, weight_filename=weight_filename, load_config=load_config)
 
@@ -30,7 +30,7 @@ def dqn_agent_play(weight_filename: str, nb_episodes: int = 10):
     train_policy = EpsilonGreedyPolicy(nb_actions)    # epsilon = 0.1
     eval_policy = GreedyPolicy(nb_actions)
 
-    agent = DQNAgent(nb_features, nb_actions, train_policy, eval_policy)
+    agent = DoubleDQNAgent(nb_features, nb_actions, train_policy, eval_policy)
 
     agent.eval(env, nb_episodes=nb_episodes, weight_filename=weight_filename, render_mode=True)
 
