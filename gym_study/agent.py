@@ -200,23 +200,23 @@ class DoubleDQNAgent(object):
 
 class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
     def __init__(self, nb_features: int, nb_actions: int, train_policy: AbstractPolicy, eval_policy: AbstractPolicy, \
-        reward_decay: float = 0.9, learning_rate: float = 1e-3, memory_size: int = 5000):
+        reward_decay: float = 0.9, learning_rate: float = 1e-3, memory_size: int = 5000, \
+        alpha: float = 0.6, beta: float = 0.4):
+
+        self.alpha = alpha
+        self.beta = beta
+
         super(DoubleDQNPrioritizedReplayAgent, self).__init__(nb_features, nb_actions, train_policy, eval_policy, \
             reward_decay, learning_rate, memory_size)
 
     def _init_memory(self):
         self.replay_buffer = PrioritizedReplayBuffer(self.nb_features * 2 + 3, self.memory_size)
 
-    def store_transition(self, err, obs, a, r, done, obs_):
-        data = np.hstack((obs.flatten(), a, r, done, obs_.flatten()))
-        self.replay_buffer.append(err, data)
-
-    def train(self, env: Env, nb_episodes: int = 100, nb_warmup_steps: int = 200, nb_steps_per_episode: int = 500, \
+    def train(self, env: Env, nb_episodes: int = 100, nb_steps_per_episode: int = 500, nb_replay_period: int = 20, \
         render_mode: bool = False, load_config: bool = False, weight_filename: str = None, \
         nb_weight_sync_interval: int = 500, nb_weight_save_interval: int = 1000, batch_size: int = 32, \
         nb_eval_episode_interval: int = 20):
 
-        self.nb_global_steps = 0
         self.nb_learn_counter = 0
 
         if load_config and os.path.exists(weight_filename):
@@ -224,7 +224,7 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
 
         # for episode = 0, M-1 do
         for i_episode in range(nb_episodes):
-            # initialize sequence s_1 = {x_1} and preprocessed sequence obs_1 = obs(s_1)
+            # observer s_0
             obs = env.reset()
 
             # for t = 0, T-1 do
@@ -232,25 +232,22 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
                 if render_mode:
                     env.render()
                 
-                # With probability epsilon, select a random action a_t
-                # otherwise select a_t = argmax_a Q(obs(s_t), a; theta)
+                # choose action a_t
                 obs = obs.reshape((1, -1))
                 action_probs = self.main_net.predict(obs)
                 a = self.train_policy.choose(action_probs)
 
-                # execute action a_t in emulator and observe reward r_t and image x_t+1
-                # set s_t+1 = s_t, a_t, x_t+1 and preprocess obs_t+1 = obs(s_t+1)
+                # observe s_t+1, r_t+1, ...
                 obs_, r, done, _ = env.step(a)
 
-                # store transition (obs_t, a_t, r_t, obs_t+1) in D
-                self.store_transition(pri, obs, a, r, done, obs_)
+                # store transition in Η with maximal priority p_t = max p_i which i < t
+                self.store_transition(obs, a, r, done, obs_)
 
-                # skip warmup steps
-                if self.nb_global_steps >= nb_warmup_steps:
+                # if t % K == 0, then batch update p and theta
+                if (t + 1) % nb_replay_period == 0:
                     self.learn(batch_size)
-                
-                # every C steps, reset target_net = main_net, that is to sync theta_eval to theta_target
-                if self.nb_learn_counter > 0 and self.nb_learn_counter % nb_weight_sync_interval == 0:
+
+                    # from time to time copy weights into target network
                     self.sync_weights()
                 
                 # save weights periodically
@@ -260,14 +257,12 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
 
                 obs = deepcopy(obs_)
 
-                self.nb_global_steps += 1
-
                 if done:
                     logging.info('Training Episode: %d|%d, Times: %d' % (i_episode+1, nb_episodes, t+1))
                     break
             
             # eval every nb_eval_episode_interval
-            if self.nb_global_steps >= nb_warmup_steps and i_episode % nb_eval_episode_interval == 0:
+            if i_episode > 0 and i_episode % nb_eval_episode_interval == 0:
                 score = self._eval(env, nb_episodes=5, render_mode=False)
         
         # wrapup
@@ -276,10 +271,15 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
         self.save_weights(weight_filename)
         logging.info('dump remaining histories to file')
         self.history_manager.dump()
+    
+    def update_weights(self):
+        pass
 
     def learn(self, batch_size: int = 32):
+        self.accumulate_weight_change = 0
+
         # sample random minibatch of transitions (obs_j, a_j, r_j, obs_j+1) from D
-        batch = self.replay_buffer.sample(batch_size)
+        idx, pri, data = self.replay_buffer.sample(batch_size)
 
         # compute q_target
         # magic
@@ -305,3 +305,8 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
         self.history_manager.save(history.history)
 
         self.nb_learn_counter += 1
+
+
+
+        # TODO update weights theta = theta + learning_rate * accumulate_weight_change
+        self.update_weights()
