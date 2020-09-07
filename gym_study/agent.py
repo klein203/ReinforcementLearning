@@ -43,18 +43,15 @@ class DoubleDQNAgent(object):
         self.replay_buffer = ReplayBuffer(self.nb_features * 2 + 3, self.memory_size)
     
     def _init_model(self):
-        self.optimizer = RMSprop(self.learning_rate)
-
         self.main_net = DeepQNetwork(nb_features, nb_actions)    # training, predict network
-        self.main_net.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
-        
         self.target_net = clone_model(self.main_net) # same structure as main_net, target network
-        self.target_net.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
     
     def _init_history(self):
         self.history_manager = HistoryManager('histories.%f.pkl' % time.time())
 
     def store_transition(self, obs, a, r, done, obs_):
+        # Φ(s_t), a, r, done, Φ(s_t+1)
+        # 4, 1, 1, 1, 4 -> 4 * 2 + 3
         transition = np.hstack((obs.flatten(), a, r, done, obs_.flatten()))
         self.replay_buffer.append(transition)
 
@@ -62,6 +59,10 @@ class DoubleDQNAgent(object):
         render_mode: bool = False, load_config: bool = False, weight_filename: str = None, \
         nb_weight_sync_interval: int = 500, nb_weight_save_interval: int = 1000, batch_size: int = 32, \
         nb_eval_episode_interval: int = 20):
+        
+        self.optimizer = RMSprop(self.learning_rate)
+        self.main_net.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
+        self.target_net.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
 
         self.nb_global_steps = 0
         self.nb_learn_counter = 0
@@ -210,12 +211,14 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
             reward_decay, learning_rate, memory_size)
 
     def _init_memory(self):
-        self.replay_buffer = PrioritizedReplayBuffer(self.nb_features * 2 + 3, self.memory_size)
+        self.replay_buffer = PrioritizedReplayBuffer(self.nb_features * 2 + 3, self.memory_size, self.alpha, self.beta)
 
     def train(self, env: Env, nb_episodes: int = 100, nb_steps_per_episode: int = 500, nb_replay_period: int = 20, \
         render_mode: bool = False, load_config: bool = False, weight_filename: str = None, \
         nb_weight_sync_interval: int = 500, nb_weight_save_interval: int = 1000, batch_size: int = 32, \
         nb_eval_episode_interval: int = 20):
+
+        self.optimizer = RMSprop(self.learning_rate)
 
         self.nb_learn_counter = 0
 
@@ -275,27 +278,37 @@ class DoubleDQNPrioritizedReplayAgent(DoubleDQNAgent):
     def update_weights(self):
         pass
 
+    def mean_squared_error(y_true, y_pred):
+        return K.mean(K.square(y_pred - y_true), axis=-1)
+
     def learn(self, batch_size: int = 32):
         self.accumulate_weight_change = 0
 
         # sample random minibatch of transitions (obs_j, a_j, r_j, obs_j+1) from D
-        idx, pri, data = self.replay_buffer.sample(batch_size)
+        batch_idx, batch_is, batch_data = self.replay_buffer.sample(batch_size)
+
+        batch_obs = batch_data[:, :self.nb_features].astype(float)
+        batch_a = batch_data[:, self.nb_features].astype(int)
+        batch_r = batch_data[:, self.nb_features+1].astype(int)
+        batch_done = batch_data[:, self.nb_features+2].astype(int)
+        batch_obs_ = batch_data[:, -self.nb_features:].astype(float)
 
         # compute q_target
-        # magic
-        q_eval_tmp = self.main_net.predict(batch[:, :self.nb_features])
-        q_target = deepcopy(q_eval_tmp)
-        
-        # batch index
-        batch_idx = np.arange(batch_size, dtype=np.int32)
-        # only update parameters with obs_j, a_j
-        a = batch[:, self.nb_features].astype(int)
+        # argmax_a as action mask
+        mask_a = np.argmax(self.main_net.predict(batch_obs_), axis=1)
 
-        r = batch[:, self.nb_features+1]
-        q_target_obs_ = self.target_net.predict(batch[:, -self.nb_features:])
-        done = batch[:, self.nb_features+2].astype(int)
+        # Q_target(obs_j, A_j) = R_j + γ_j * Q_target(obs_j+1, argmax_a Q(obs_j+1, a))
+        q_target = batch_r + self.reward_decay * self.target_net.predict(batch_obs_)[mask_a]
 
-        q_target[batch_idx, a] = r + self.reward_decay * np.max(q_target_obs_, axis=1) * (1 - done)
+        # compute q_predict
+        # Q_predict(obs_j, A_j) = Q(obs_j, A_j)
+        q_predict = self.main_net.predict(batch_obs)
+
+        # TD-error = δ_j = Q_target - Q_predict
+        err = q_target - q_predict
+
+        # update transition priority p_j <- |δ_j|
+        self.replay_buffer.batch_update(batch_idx, np.abs(err))
         
         # perform a gradient descent step on (y_target - Q_eval(obs_j, a_j; theta))^2 
         # with respect to the network parameters theta

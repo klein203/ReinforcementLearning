@@ -76,16 +76,21 @@ class SumTree(object):
         return self.pri_tree[0]
     
     def max_pri(self) -> float:
-        return np.max(self.pri_tree[-self.capacity:])
+        return np.max(self.get_all_pris())
+    
+    def get_all_pris(self) -> np.array:
+        return self.pri_tree[-self.capacity:]
 
 
 class PrioritizedReplayBuffer(object):
-    def __init__(self, max_size: int, capacity: int = 5000):
+    def __init__(self, max_size: int, capacity: int = 5000, alpha: float = 0, beta: float = 1):
         self.max_size = max_size
         self.capacity = capacity
         self.buffer = SumTree(max_size, capacity)
         self.pri_max_limit = 1.0
-        self.epsilon = 0.01
+        self.epsilon = 1e-4
+        self.alpha = alpha
+        self.beta = beta
 
     def append(self, data: np.array):
         pri = np.max(self.buffer.max_pri())
@@ -98,22 +103,45 @@ class PrioritizedReplayBuffer(object):
 
     def sample(self, batch_size: int = 32) -> (np.array, np.array, np.array):
         sum_pri = self.buffer.sum_pri()
+        nb_size = self.buffer.capacity
         batch_range = sum_pri / batch_size
         batch_idx = np.zeros(batch_size)
-        batch_pri = np.zeros(batch_size)
         batch_data = np.zeros((batch_size, self.max_size))
+        
+        # compute all pris with alpha exponent
+        pris_with_alpha = _compute_pris_with_alpha(self.buffer.get_all_pris(), self.alpha)
 
+        # compute all importance sampling weight
+        importance_samplings = _compute_importance_samplings()
+        
+        # batch sampling, get idx and data
         for i in range(batch_size):
             low = max(0, batch_range * i)
             high = min(batch_range * (i + 1), sum_pri)
             pri = np.random.uniform(low, high)
-            batch_idx[i], batch_pri[i], batch_data[i, :] = self.buffer.sample(pri)
-            batch_idx[i] -= (self.capacity - 1)
+            batch_idx[i], _, batch_data[i, :] = self.buffer.sample(pri)
+            batch_idx[i] -= (self.capacity - 1) # [0, capacity)
 
-        return batch_idx, batch_pri, batch_data
+        return batch_idx, importance_samplings[batch_idx], batch_data
+    
+    def _compute_pris_with_alpha(self, pris: np.array, alpha: float) -> np.array:
+        return np.power(pris, alpha) / np.power(pris, alpha).sum()
+    
+    def _compute_importance_samplings(self, pris: np.array, n: int, beta: float) -> np.array:
+        is_vals = np.power(n * pris, -beta)
+        max_val = is_vals.max()
+        return is_vals / max_val
 
     def update(self, idx: int, pri: float):
+        # simple epsilon
+        if pri == 0:
+            pri += self.epsilon
+        
+        # TODO Peusdo: pri_i = 1/rank(i)
+
         # idx range [0, self.capacity)
         self.buffer.update(self.capacity - 1 + idx, pri)
     
-    # def batch_update(self, )
+    def batch_update(self, idxs: np.array, pris: np.array):
+        for idx in idxs:
+            self.update(idx, pris[idx])
