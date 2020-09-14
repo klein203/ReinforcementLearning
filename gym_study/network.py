@@ -1,16 +1,46 @@
-from keras.models import Sequential
-from keras.layers import Dense
+from keras import models
+from keras import layers
+import tensorflow as tf
+    
+
+class DQNNetworkLayer(layers.Layer):
+    def __init__(self, output_dim: int = 32, **kwargs):
+        super(DQNNetworkLayer, self).__init__(**kwargs)
+        self.inner_layer_1 = layers.Dense(64, activation="relu")
+        self.inner_layer_2 = layers.Dense(64, activation="relu")
+        self.inner_layer_3 = layers.Dense(output_dim)
+    
+    def call(self, inputs: layers.Input):
+        x = self.inner_layer_1(inputs)
+        x = self.inner_layer_2(x)
+        return self.inner_layer_3(x)
 
 
-class DeepQNetwork(Sequential):
+class DQNLossLayer(layers.Layer):
+    def __init__(self, **kwargs):
+        super(DQNLossLayer, self).__init__(**kwargs)
+    
+    def call(self, inputs: layers.Input, mask: layers.Input, importance_sampling: layers.Input, targets: layers.Input):
+        err = (inputs - targets) * mask * importance_sampling
+        self.add_loss(tf.reduce_mean(err))
+        return err
+
+
+class DeepQNetwork():
     def __init__(self, input_dim: int, output_dim: int):
         super(DeepQNetwork, self).__init__()
         self._build_model(input_dim, output_dim)
 
     def _build_model(self, input_dim: int, output_dim: int):
-        # fc: input_dim + 1 x 64
-        self.add(Dense(64, input_dim=input_dim, activation='relu'))
-        # fc: 64 + 1 x 64
-        self.add(Dense(64, activation='relu'))
-        # fc: 64 + 1 x out_dim
-        self.add(Dense(output_dim))
+        inputs = layers.Input((input_dim,), name="Inputs")
+        mask = layers.Input((output_dim,), name="Mask")
+        importance_sampling = layers.Input((1,), name="IS")
+        targets = layers.Input((output_dim,), name="Targets")
+
+        self.logits = DQNNetworkLayer(output_dim, name="DQN_NN")(inputs)
+        self.loss = DQNLossLayer(name="DQN_Loss")(self.logits, mask, importance_sampling, targets)
+
+        self.model = models.Model(
+            inputs=[inputs, mask, importance_sampling, targets],
+            outputs=self.loss
+        )
