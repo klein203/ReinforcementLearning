@@ -45,8 +45,8 @@ class DoubleDQNAgent(object):
         self.replay_buffer = ReplayBuffer(self.nb_features * 2 + 3, memory_size)
     
     def _init_model(self, nb_features, nb_actions):
-        self.main_net = DeepQNetwork(nb_features, nb_actions)    # training, predict network
-        self.target_net = clone_model(self.main_net) # same structure as main_net, target network
+        self.main_net = DeepQNetwork(nb_features, nb_actions) # training, predict network
+        self.target_net = DeepQNetwork(nb_features, nb_actions) # same structure as main_net, target network
     
     def _init_history(self):
         self.history_manager = HistoryManager('histories.%f.pkl' % time.time())
@@ -63,8 +63,8 @@ class DoubleDQNAgent(object):
         nb_eval_episode_interval: int = 20):
         
         self.optimizer = RMSprop(self.learning_rate)
-        # self.main_net.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
-        self.target_net.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
+        self.main_net.model.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
+        self.target_net.model.compile(optimizer=self.optimizer, loss='mse', metrics=['accuracy'])
 
         self.nb_global_steps = 0
         self.nb_learn_counter = 0
@@ -139,22 +139,19 @@ class DoubleDQNAgent(object):
 
         # compute q_target
         # argmax_a as action mask
-        batch_argmax_a_mask = to_categorical(np.argmax(self.main_net.predict(batch_obs_), axis=1)).astype(bool)
+        batch_argmax_a_mask = to_categorical(np.argmax(self.main_net.predict_prob(batch_obs_), axis=1)).astype(bool)
 
         # Q_target(obs_j, A_j) = R_j + γ_j * Q_target(obs_j+1, argmax_a Q(obs_j+1, a))
-        q_target = batch_r + self.reward_decay * self.target_net.predict(batch_obs_) * (1 - batch_done)
+        q_target = batch_r + self.reward_decay * self.target_net.predict([batch_obs_, batch_argmax_a_mask, ]) * (1 - batch_done)
 
         # compute q_predict
         # Q_predict(obs_j, A_j) = Q(obs_j, A_j)
         batch_a_mask = to_categorical(batch_a).astype(bool)
-        # q_predict = self.main_net.predict(batch_obs)[batch_a_mask]
+        q_predict = self.main_net.predict([batch_obs, batch_a_mask, )
 
         # perform a gradient descent step on (y_target - Q_eval(obs_j, a_j; theta))^2 
         # with respect to the network parameters theta
-        def loss_func(y_predict, y_target):
-            return K.mean(K.square(y_predict[batch_a_mask] - y_target[batch_argmax_a_mask]))
         
-        self.main_net.compile(optimizer=self.optimizer, loss=loss_func, metrics=['accuracy'])
         history = self.main_net.fit(batch_obs, q_target, epochs=self.nb_learn_counter+1, \
             initial_epoch=self.nb_learn_counter, verbose=0)
 

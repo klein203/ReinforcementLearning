@@ -34,13 +34,29 @@ class DeepQNetwork():
     def _build_model(self, input_dim: int, output_dim: int):
         inputs = layers.Input((input_dim,), name="Inputs")
         mask = layers.Input((output_dim,), name="Mask")
-        importance_sampling = layers.Input((1,), name="IS")
+        # importance_sampling = layers.Input((1,), name="IS")
         targets = layers.Input((output_dim,), name="Targets")
 
         self.logits = DQNNetworkLayer(output_dim, name="DQN_NN")(inputs)
-        self.loss = DQNLossLayer(name="DQN_Loss")(self.logits, mask, importance_sampling, targets)
+        # self.mask_logits
+        # self.loss = DQNLossLayer(name="DQN_Loss")(self.logits, mask, importance_sampling, targets)
+        self.loss = DQNLossLayer(name="DQN_Loss")(self.logits, mask, targets)
 
         self.model = models.Model(
-            inputs=[inputs, mask, importance_sampling, targets],
+            # inputs=[inputs, mask, importance_sampling, targets],
+            inputs=[inputs, mask, targets],
             outputs=self.loss
         )
+    
+    def fit(self, x, y, batch_size=32, validation_split=0.2):
+        return self.model.fit(x, y, batch_size=batch_size, validation_split=validation_split)
+    
+    def predict_prob(self, x):
+        model = models.Model(
+            inputs=self.model.inputs,
+            outputs=self.logits
+        )
+        return model.predict(x)
+    
+    def predict(self, x):
+        return self.model.predict(x)
